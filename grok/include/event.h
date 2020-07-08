@@ -591,15 +591,14 @@ namespace grok
 
         void notify(Args...args)
         {
-            m_mutex.lock();
-            if (!m_enabled)
+            TStrategy strategy;
             {
-                m_mutex.unlock();
-                return;
+                ScopeGuard lock(m_mutex);
+                if (!m_enabled) {
+                    return;
+                }
+                strategy = m_strategy;
             }
-            TStrategy strategy(m_strategy);
-            m_mutex.unlock();
-
             strategy.notify(std::forward<Args>(args)...);
         }
 
