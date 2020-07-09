@@ -246,7 +246,7 @@ namespace grok
         template <typename ThreadEntry>
         ThreadEntry* getThreadEntryByType()
         {
-            static_assert(std::is_convertible<ThreadEntry, ThreadEntryBase>::value, "Error ThreadEntry Type");
+            static_assert(std::is_base_of<ThreadEntryBase, ThreadEntry>::value, "Error ThreadEntry Type");
             return static_cast<ThreadEntry*>(getThreadEntry());
         }
 

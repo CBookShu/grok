@@ -2,8 +2,9 @@
 #include <chrono>
 #include <functional>
 #include <ctime>
+#include <string>
 #include "../grok/include/grok.h"
-#include "testloop.h"
+#include "testWorkPool.h"
 
 using namespace std;
 
@@ -11,10 +12,22 @@ class Controller : public grok::WorkStaff
 {
 public:
 	grok::BasicEventNoMutex<> evStart;
-	grok::BasicEventNoMutex<int> evClock;
+	grok::BasicEventNoMutex<> evStop;
+	grok::BasicEventNoMutex<bool&, std::string&> evCmd;
 
-	void Start() {
+	void StartLoop(const std::string& quitcmd = "quit") {
 		evStart();
+
+		std::string cmd;
+		while (std::getline(std::cin, cmd)) {
+			if (cmd == quitcmd) {
+				break;
+			}
+			bool ok = true;
+			evCmd(ok, cmd);
+		}
+
+		evStop();
 	}
 
 	// 该接口由此类提供
@@ -36,7 +49,8 @@ public:
 
 protected:
 	void OnTimerFresh() {
-		evClock.notify(std::time(nullptr));
+		// 定时器功能
+
 	}
 
 private:
@@ -47,14 +61,20 @@ class Player
 {
 public:
 	std::function<long long()> imGetVipNum;
+	std::function<std::future<int>(const TestWorkPool::Keys&, std::function<int(MyEntry*)>)> imInsertJob;
 
 	void OnStart() {
 		cout << "VipNum:" << imGetVipNum() << endl;
 		cout << "Player Start" << endl;
 	}
-	void OnClock(int c) {
-		cout << "VipNum:" << imGetVipNum() << endl;
-		cout << "Player Clock:" << c << endl;
+	void OnCmd(bool& ok, std::string& cmd) {
+		if (cmd == "Player") {
+			TestWorkPool::Keys keys = { "Player" };
+			imInsertJob(keys, [this](MyEntry* entry) {
+				cout << "Player work:" << imGetVipNum() << endl;
+				return 1;
+			});
+		}
 	}
 };
 
@@ -62,14 +82,19 @@ class Toy
 {
 public:
 	std::function<long long()> imGetVipNum;
+	std::function<std::future<void>(const TestWorkPool::Keys&, std::function<void(MyEntry*)>)> imInsertJob;
 
 	void OnStart() {
 		cout << "VipNum:" << imGetVipNum() << endl;
 		cout << "Toy Start" << endl;
 	}
-	void OnClock(int c) {
-		cout << "VipNum:" << imGetVipNum() << endl;
-		cout << "Toy Clock:" << c << endl;
+	void OnCmd(bool& ok, std::string& cmd) {
+		if (cmd == "Toy") {
+			TestWorkPool::Keys keys = { "Toy" };
+			imInsertJob(keys, [this](MyEntry* entry) {
+				cout << "Toy work:" << imGetVipNum() << endl;
+			});
+		}
 	}
 };
 
@@ -80,21 +105,29 @@ int main(int argc, char** argv)
 	EventPools::Init();
 
 	auto controller = Entity::GetEntity().assign<Controller>();
-	auto testLoop = Entity::GetEntity().assign<TestLoop>();
-	testLoop->evCmd += delegate(controller, &Controller::OnCmd);
+	controller->evCmd += delegate(controller, &Controller::OnCmd);
+
+	auto workPool = Entity::GetEntity().share_assign<TestWorkPool>();
+	controller->evStart += delegate(workPool, &TestWorkPool::OnStart);
 
 	auto player = Entity::GetEntity().assign<Player>();
 	controller->evStart += delegate(player, &Player::OnStart);
-	controller->evClock += delegate(player, &Player::OnClock);
 	player->imGetVipNum = std::bind(&Controller::GetVipNum, controller);
+	player->imInsertJob = [workPool](const TestWorkPool::Keys&r1, std::function<int(MyEntry*)>r2) {
+		return workPool->insertWorkJob(r1, r2);
+	};
+	controller->evCmd += delegate(player, &Player::OnCmd);
 
 	auto toy = Entity::GetEntity().assign<Toy>();
 	controller->evStart += delegate(toy, &Toy::OnStart);
-	controller->evClock += delegate(toy, &Toy::OnClock);
 	toy->imGetVipNum = std::bind(&Controller::GetVipNum, controller);
+	toy->imInsertJob = [workPool](const TestWorkPool::Keys& r1, std::function<void(MyEntry*)>r2) {
+		return workPool->insertWorkJob(r1, r2);
+	};
+	controller->evCmd += delegate(toy, &Toy::OnCmd);
 
-	controller->Start();
-	testLoop->StartLoop();
+
+	controller->StartLoop();
 
 	EventPools::Uinit();
 	return 0;

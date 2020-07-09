@@ -21,7 +21,8 @@ boost::thread_specific_ptr<ThreadEntryBase> EventPools::tls_entry([](ThreadEntry
 
 void EventPools::Init()
 {
-    instance->start();
+    auto num = std::thread::hardware_concurrency() * 2 + 1;
+    instance->start(num);
 }
 
 void EventPools::Uinit()

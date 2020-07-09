@@ -357,7 +357,7 @@ namespace grok
     {
         // ? 这里的is_convertible 会判断异常，后面需要再研究
         //static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
-        static_assert(std::is_same<O1, O2>::value, "Can`t match type");
+        static_assert(std::is_base_of<O2, O1>::value, "Can`t match type");
 
         auto sptr = std::static_pointer_cast<O2>(optr.lock());
         std::weak_ptr<O2> wptr = sptr;
@@ -369,7 +369,7 @@ namespace grok
     {
         // ? 这里的is_convertible 会判断异常，后面需要再研究
         //static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
-        static_assert(std::is_same<O1, O2>::value, "Can`t match type");
+        static_assert(std::is_base_of<O2, O1>::value, "Can`t match type");
 
         return Delegate<O2, 0, Args...>(static_cast<O2*>(optr), NotifyMethod);
     }
@@ -379,7 +379,7 @@ namespace grok
     {
         // ? 这里的is_convertible 会判断异常，后面需要再研究
         //static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
-        static_assert(std::is_same<O1, O2>::value, "Can`t match type");
+        static_assert(std::is_base_of<O2, O1>::value, "Can`t match type");
 
         auto sptr = std::static_pointer_cast<O2>(optr);
         return Delegate<O2, 1, Args...>(sptr, NotifyMethod);
