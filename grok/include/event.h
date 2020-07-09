@@ -355,7 +355,10 @@ namespace grok
     template <typename O1, typename O2, typename...Args>
     inline Delegate<O2, 2, Args...> delegate(std::weak_ptr<O1> optr, void(O2::* NotifyMethod)(Args...))
     {
-        static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
+        // ? 这里的is_convertible 会判断异常，后面需要再研究
+        //static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
+        static_assert(std::is_same<O1, O2>::value, "Can`t match type");
+
         auto sptr = std::static_pointer_cast<O2>(optr.lock());
         std::weak_ptr<O2> wptr = sptr;
         return Delegate<O2, 2, Args...>(wptr, NotifyMethod);
@@ -364,7 +367,9 @@ namespace grok
     template <typename O1, typename O2, typename...Args>
     inline Delegate<O2, 0, Args...> delegate(O1* optr, void(O2::* NotifyMethod)(Args...))
     {
-        static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
+        // ? 这里的is_convertible 会判断异常，后面需要再研究
+        //static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
+        static_assert(std::is_same<O1, O2>::value, "Can`t match type");
 
         return Delegate<O2, 0, Args...>(static_cast<O2*>(optr), NotifyMethod);
     }
@@ -372,7 +377,10 @@ namespace grok
     template <typename O1, typename O2, typename...Args>
     inline Delegate<O2, 1, Args...> delegate(std::shared_ptr<O1> optr, void(O2::* NotifyMethod)(Args...))
     {
-        static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
+        // ? 这里的is_convertible 会判断异常，后面需要再研究
+        //static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
+        static_assert(std::is_same<O1, O2>::value, "Can`t match type");
+
         auto sptr = std::static_pointer_cast<O2>(optr);
         return Delegate<O2, 1, Args...>(sptr, NotifyMethod);
     }

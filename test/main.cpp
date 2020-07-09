@@ -2,7 +2,8 @@
 #include <chrono>
 #include <functional>
 #include <ctime>
-#include "../include/grok.h"
+#include "../grok/include/grok.h"
+#include "testloop.h"
 
 using namespace std;
 
@@ -13,16 +14,24 @@ public:
 	grok::BasicEventNoMutex<int> evClock;
 
 	void Start() {
-		m_timer = evp().loopTimer([this]() {
-			OnTimerFresh();
-		}, std::chrono::seconds(1), strand());
-
 		evStart();
 	}
 
 	// 该接口由此类提供
 	long long GetVipNum() {
 		return std::chrono::steady_clock::now().time_since_epoch().count();
+	}
+
+	void OnCmd(bool& ok, std::string& cmd) {
+		if (cmd == "Controller") {
+			m_timer = evp().loopTimer([this]() {
+				OnTimerFresh();
+			}, std::chrono::seconds(1), strand());
+
+		}
+		else if (cmd == "Controller1") {
+			m_timer = nullptr;
+		}
 	}
 
 protected:
@@ -71,6 +80,8 @@ int main(int argc, char** argv)
 	EventPools::Init();
 
 	auto controller = Entity::GetEntity().assign<Controller>();
+	auto testLoop = Entity::GetEntity().assign<TestLoop>();
+	testLoop->evCmd += delegate(controller, &Controller::OnCmd);
 
 	auto player = Entity::GetEntity().assign<Player>();
 	controller->evStart += delegate(player, &Player::OnStart);
@@ -83,9 +94,7 @@ int main(int argc, char** argv)
 	toy->imGetVipNum = std::bind(&Controller::GetVipNum, controller);
 
 	controller->Start();
-
-	std::this_thread::sleep_for(std::chrono::seconds(30));
-	cout << "hello world" << endl;
+	testLoop->StartLoop();
 
 	EventPools::Uinit();
 	return 0;

@@ -8,10 +8,10 @@ project ("grok")
 
 include_directories("F:\\opensource\\boost_1_67_0")
 link_directories("F:\\opensource\\boost_1_67_0\\stage\\lib")
-file(GLOB_RECURSE c_files ${PROJECT_SOURCE_DIR}/src/*.cpp)
+file(GLOB_RECURSE c_files ${PROJECT_SOURCE_DIR}/grok/src/*.cpp)
 add_library(grok_lib_shared  SHARED ${c_files})
 add_library(grok_lib_static ${c_files})
 
-
-add_executable(demo ${PROJECT_SOURCE_DIR}/test/main.cpp)
+file(GLOB_RECURSE demo_cpp ${PROJECT_SOURCE_DIR}/test/*.cpp)
+add_executable(demo ${demo_cpp})
 target_link_libraries(demo grok_lib_static)
