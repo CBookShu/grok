@@ -2,38 +2,62 @@
 
 using namespace grok;
 
-void WorkPool::insertJob(const WorkPool::Keys& keys, std::function<void()> f) {
+void WorkPool::start(int num) {
+	EventPools::start(num);
+	m_timerCacheClear = loopTimer([this]() {onTimerClearCache(); }, std::chrono::hours(1));
+}
+
+void WorkPool::stop() {
+	m_timerCacheClear = nullptr;
+	EventPools::stop();
+}
+
+void WorkPool::insertJob(WorkPool::Job::Ptr job) {
 	{
 		std::lock_guard<std::mutex> guard(m_lock);
-		for (auto& it : keys) {
+		bool block = false;
+		for (auto& it : job->keys)
+		{
 			if (m_keyRunnings.count(it)) {
 				// 发现前面居然已经有在等待的处理了，就追加到队列后面等待吧
-				Job::Ptr job = std::make_shared<Job>();
-				job->keys = keys;
-				job->jobcb = f;
-				m_jobs.push_back(job);
-				return;
+				block = true;
 			}
+			// 填充job中的缓存弱指针
+			auto it1 = m_jobCaches.find(it);
+			if (it1 == m_jobCaches.end()) {
+				auto sprAny = std::make_shared<boost::any>();
+				m_jobCaches[it] = sprAny;
+				job->jobCaches[it] = sprAny;
+			}
+			else {
+				job->jobCaches[it] = it1->second;
+			}
+			setJobLastTime(it);
+		}
+
+		if (block) {
+			m_jobs.push_back(job);
+			return;
 		}
 
 		// 到了这里，说明keys 中的所有key都没有被占用，那它立刻就可以执行了
 		// 一旦立刻执行了，就可以把key设置到 m_keyRunnings 中了
-		for (auto& it : keys)
+		for (auto& it : job->keys)
 		{
 			m_keyRunnings.insert(it);
 		}
 	}
 
 	// 走到了这里，就代表可以直接调用了！！
-	this->ios().post(f);
+	this->ios().post(job->jobcb);
 }
 
-void WorkPool::completeJob(const WorkPool::Keys& keys) {
+void WorkPool::completeJob(Job::Ptr job) {
 	std::vector<Job::Ptr> pendingjobs;
 	{
 		std::lock_guard<std::mutex> guard(m_lock);
 		// 把当前的key还原掉
-		for (auto& it : keys)
+		for (auto& it : job->keys)
 		{
 			m_keyRunnings.erase(it);
 		}
@@ -72,4 +96,44 @@ void WorkPool::completeJob(const WorkPool::Keys& keys) {
 		// 唤醒等待的Job
 		this->ios().post((*it)->jobcb);
 	}
+}
+
+void WorkPool::setJobLastTime(const std::string& key) {
+	auto now = std::chrono::system_clock::now();
+	auto it = m_jobLastTime.find(key);
+	if (it != m_jobLastTime.end()) {
+		// 先删除原来的值
+		auto preTime = it->second;
+		auto rangit = m_jobTimeRank.equal_range(preTime);
+		while (rangit.first != rangit.second)
+		{
+			if (rangit.first->second == key) {
+				// 找到这个Key删除
+				m_jobTimeRank.erase(rangit.first);
+				break;
+			}
+			rangit.first++;
+		}
+	}
+
+	m_jobLastTime[key] = now;
+	m_jobTimeRank.insert({ now, key });
+}
+
+void WorkPool::onTimerClearCache() {
+	auto now = std::chrono::system_clock::now();
+	auto preStamp = now - std::chrono::seconds(getKeepLiveTime());
+
+	std::lock_guard<std::mutex> guard(m_lock);
+	auto findEnd = m_jobTimeRank.upper_bound(preStamp);
+	for (auto it = m_jobTimeRank.begin(); it != findEnd;)
+	{
+		m_jobLastTime.erase(it->second);
+		m_jobCaches.erase(it->second);
+		it = m_jobTimeRank.erase(it);
+	}
+}
+
+int WorkPool::getKeepLiveTime() {
+	return 60 * 60; // 默认一个小时
 }

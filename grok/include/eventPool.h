@@ -55,7 +55,9 @@ namespace grok
             auto sp = tptr.lock();
             if (sp)
             {
-                auto self = shared_from_this();
+                // COMMONT
+                // 在g++ 编译的时候，遇到模板集成，使用父类接口或变量，必须使用this
+                auto self = this->shared_from_this();
                 sp->expires_from_now(t);
                 sp->async_wait([self](boost::system::error_code ec)
                 {
@@ -88,7 +90,9 @@ namespace grok
             auto sp = tptr.lock();
             if (sp)
             {
-                auto self = shared_from_this();
+                // COMMONT
+                // 在g++ 编译的时候，遇到模板集成，使用父类接口或变量，必须使用this
+                auto self = this->shared_from_this();
                 sp->expires_from_now(t);
                 auto wrapf = strand.wrap([self](boost::system::error_code ec)
                 {
@@ -114,7 +118,7 @@ namespace grok
         static void Uinit();
 
         // 构造函数使用默认
-        EventPools() = default;
+        EventPools();
 
         // 析构函数的时候，会调用一次stop
         virtual ~EventPools();
@@ -160,12 +164,12 @@ namespace grok
             return std::make_shared<Timer>(ios());
         }
 
-        template <typename Timer = stdtimer, typename T, typename F>
+        template <typename Timer = stdtimer, typename T>
         // Timer 代表哪一种定时器
         // F = std::funcion<void()> 兼容
         // T 代表多长时间之后执行
         // onceTimer一定要执行cancel才能停止！
-        std::shared_ptr<Timer> onceTimer(F& f, const T& t)
+        std::shared_ptr<Timer> onceTimer(std::function<void()> f, const T& t)
         {
             auto tp = timerPtr<Timer>();
             tp->expires_from_now(t);
@@ -180,12 +184,12 @@ namespace grok
             return tp;
         }
 
-        template <typename Timer = stdtimer, typename T, typename F>
+        template <typename Timer = stdtimer, typename T>
         // Timer 代表哪一种定时器
         // F = std::funcion<void()> 兼容
         // T 代表多长时间之后执行
         // onceTimer一定要执行cancel才能停止！
-        std::shared_ptr<Timer> onceTimer(F& f, const T& t, Strand& strand)
+        std::shared_ptr<Timer> onceTimer(std::function<void()> f, const T& t, Strand& strand)
         {
             auto tp = timerPtr<Timer>();
             tp->expires_from_now(t);
@@ -201,15 +205,15 @@ namespace grok
             return tp;
         }
 
-        template <typename Timer = stdtimer, typename T, typename F>
+        template <typename Timer = stdtimer, typename T>
         // Timer 代表哪一种定时器
         // F = std::funcion<void()> 兼容
         // T 代表多长时间之后执行
-        std::shared_ptr<Timer> loopTimer(F& f, const T& t)
+        std::shared_ptr<Timer> loopTimer(std::function<void()> f, const T& t)
         {
             auto tp = timerPtr<Timer>();
             using ThisTimerHelper = TimerHelper<Timer, T>;
-            using ThisTimerHelperPtr = ThisTimerHelper::Ptr;
+            using ThisTimerHelperPtr = typename ThisTimerHelper::Ptr;
             ThisTimerHelperPtr timerHelper = std::make_shared<ThisTimerHelper>(t);
             timerHelper->tptr = tp;
             timerHelper->f = f;
@@ -218,15 +222,16 @@ namespace grok
             return tp;
         }
 
-        template <typename Timer = stdtimer, typename T, typename F>
+        template <typename Timer = stdtimer, typename T>
         // Timer 代表哪一种定时器
         // F = std::funcion<void()> 兼容
         // T 代表多长时间之后执行 std::chrono::second、std::chrono::minutes...
-        std::shared_ptr<Timer> loopTimer(F& f, const T& t, Strand& strand)
+        // 在vs 上 这里的f类型可以直接用一个typename F代替，但是g++ 就不行，编译时有些麻烦
+        std::shared_ptr<Timer> loopTimer(std::function<void()> f, const T& t, Strand& strand)
         {
             auto tp = timerPtr<Timer>();
             using ThisTimerHelper = StrandTimerHelper<Timer, T>;
-            using ThisTimerHelperPtr = ThisTimerHelper::Ptr;
+            using ThisTimerHelperPtr = typename ThisTimerHelper::Ptr;
             ThisTimerHelperPtr timerHelper = std::make_shared<ThisTimerHelper>(t, strand);
             timerHelper->tptr = tp;
             timerHelper->f = f;
@@ -251,7 +256,7 @@ namespace grok
         }
 
     private:
-        std::atomic<bool>               m_bRunning = false;
+        std::atomic<bool>               m_bRunning;
         std::vector<std::shared_ptr<ThreadEntryBase>>   m_guards;
         boost::asio::io_service         m_ios;
 

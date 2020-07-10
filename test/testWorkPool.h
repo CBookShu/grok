@@ -1,15 +1,9 @@
 #pragma once
 #include "../grok/include/grok.h"
 
-struct MyEntry : public grok::ThreadEntryBase
+struct MyEntry : public grok::WorkEntryWithCache
 {
 public:
-	virtual void enterThread() {
-
-	}
-	virtual void leaveThread() {
-
-	}
 };
 
 class TestWorkPool : public grok::WorkPool

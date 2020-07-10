@@ -30,6 +30,11 @@ void EventPools::Uinit()
     instance->stop();
 }
 
+grok::EventPools::EventPools()
+{
+    m_bRunning = false;
+}
+
 EventPools::~EventPools()
 {
     stop();

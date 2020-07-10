@@ -3,10 +3,10 @@
 #include <functional>
 #include <ctime>
 #include <string>
+using namespace std;
+
 #include "../grok/include/grok.h"
 #include "testWorkPool.h"
-
-using namespace std;
 
 class Controller : public grok::WorkStaff
 {
@@ -37,7 +37,7 @@ public:
 
 	void OnCmd(bool& ok, std::string& cmd) {
 		if (cmd == "Controller") {
-			m_timer = evp().loopTimer([this]() {
+			m_timer = this->evp().loopTimer([this]() {
 				OnTimerFresh();
 			}, std::chrono::seconds(1), strand());
 
