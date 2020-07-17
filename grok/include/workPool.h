@@ -77,13 +77,16 @@ namespace grok {
 	protected:
 		struct AutoReuseChannel
 		{
-			AutoReuseChannel(WorkPool* p, Job::Ptr j) :parrent(p), job(j) {};
+			AutoReuseChannel(WorkPool* p, Job::Ptr j, WorkEntryWithCache* e) :parrent(p), job(j), entry(e) {};
 			~AutoReuseChannel() {
+				job->jobcb = nullptr;
+				entry->job = nullptr;
 				parrent->completeJob(job);
 			}
 
 			WorkPool* parrent = nullptr;
 			Job::Ptr job;
+			WorkEntryWithCache* entry = nullptr;
 		};
 		void insertJob(Job::Ptr job);
 		void completeJob(Job::Ptr job);
@@ -143,7 +146,7 @@ namespace grok {
 		auto p = std::make_shared<std::promise < R >>();
 		auto f = [this, invoke, p, job]() {
 			auto entry = getThreadEntryByType<WorkEntryWithCache>();
-			AutoReuseChannel erase_key(this, job);
+			AutoReuseChannel erase_key(this, job, entry);
 			try {
 				static_assert(std::is_base_of<WorkEntryWithCache, Entry>::value, "Entry Must Driver from PoolEntry");
 				entry->job = job;
@@ -165,7 +168,7 @@ namespace grok {
 		auto p = std::make_shared<std::promise < void >>();
 		auto f = [this, invoke, p, job]() {
 			auto entry = getThreadEntryByType<WorkEntryWithCache>();
-			AutoReuseChannel erase_key(this, job);
+			AutoReuseChannel erase_key(this, job, entry);
 			try {
 				static_assert(std::is_base_of<WorkEntryWithCache, Entry>::value, "Entry Must Driver from PoolEntry");
 				entry->job = job;
