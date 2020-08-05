@@ -1,7 +1,9 @@
 #include <memory>
-
+#include <functional>
+#include <chrono>
 #include <cppconn/driver.h>
 #include <cppconn/statement.h>
+#include <cppconn/prepared_statement.h>
 
 namespace sql
 {
@@ -38,6 +40,7 @@ public:
 		const std::string& szDbName);
 
 	void mysql_connect();
+	void mysql_close();
 
 	// 返回值first是err，只要非0就是错误
 	// 返回值second是结果集的个数
@@ -54,6 +57,10 @@ public:
 	// 每次在使用sqlcon前，进行一次检查，sql是否有效
 	void mysql_check_con();
 
+protected:
+	void clearMoreResult(sql::PreparedStatement* preStm);
+	void logSQLException(const std::string&stm, sql::SQLException& e);
+	virtual void logformat(const char*fmt,...);
 protected:
 	// 最近的一次mysql操作时间
 	std::chrono::system_clock::time_point m_tpLastMqlCon;

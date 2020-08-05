@@ -25,11 +25,11 @@ namespace grok
     };
 
     template <typename O, int OT, typename...Args>
-    // O´ú±íObserverµÄÀàĞÍ
-    // OT ´ú±íOµÄ´«ÈëÀàĞÍ, 0- O*, 1- std::shared_ptr<O>, 2- std::weak_ptr<O> 3-callback
-    // Args ´«Èë²ÎÊı
-    //Delegate ½«º¯Êı·â×°³É¿ÉÒÔ±È½Ï¿ÉÒÔ´«µİ£¬¿ÉÒÔÈÓÀ´ÈÓÈ¥µÄÀà
-    // Ã»ÓĞ¸øËø£¬Ó¦¸ÃÓÉÒµÎñ·½±£Ö¤ÊÇ·ñÏß³Ì°²È«
+    // Oï¿½ï¿½ï¿½ï¿½Observerï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    // OT ï¿½ï¿½ï¿½ï¿½Oï¿½Ä´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½, 0- O*, 1- std::shared_ptr<O>, 2- std::weak_ptr<O> 3-callback
+    // Args ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    //Delegate ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×°ï¿½É¿ï¿½ï¿½Ô±È½Ï¿ï¿½ï¿½Ô´ï¿½ï¿½İ£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¥ï¿½ï¿½ï¿½ï¿½
+    // Ã»ï¿½Ğ¸ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½Òµï¿½ñ·½±ï¿½Ö¤ï¿½Ç·ï¿½ï¿½ß³Ì°ï¿½È«
     struct Delegate {};
 
 
@@ -117,7 +117,7 @@ namespace grok
     };
 
     //////////////////////////////////////////////////////////////////////////
-    // O* Ô­ÉúÖ¸Õë
+    // O* Ô­ï¿½ï¿½Ö¸ï¿½ï¿½
     template <typename O, typename...Args>
     struct Delegate <O, 0, Args...> : public AbstractDelegate < Args... >
     {
@@ -198,7 +198,7 @@ namespace grok
     };
 
     //////////////////////////////////////////////////////////////////////////
-    // std::share_ptr<O> ÖÇÄÜÖ¸Õë
+    // std::share_ptr<O> ï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½
     template <typename O, typename...Args>
     struct Delegate <O, 1, Args...> : public AbstractDelegate < Args... >
     {
@@ -280,7 +280,7 @@ namespace grok
     };
 
     //////////////////////////////////////////////////////////////////////////
-    // callback ´¿º¯Êı
+    // callback ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     template <typename...Args>
     struct Delegate <void, 3, Args...> : public AbstractDelegate < Args... >
     {
@@ -355,7 +355,7 @@ namespace grok
     template <typename O1, typename O2, typename...Args>
     inline Delegate<O2, 2, Args...> delegate(std::weak_ptr<O1> optr, void(O2::* NotifyMethod)(Args...))
     {
-        // ? ÕâÀïµÄis_convertible »áÅĞ¶ÏÒì³££¬ºóÃæĞèÒªÔÙÑĞ¾¿
+        // ? ï¿½ï¿½ï¿½ï¿½ï¿½is_convertible ï¿½ï¿½ï¿½Ğ¶ï¿½ï¿½ì³£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½Ğ¾ï¿½
         //static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
         static_assert(std::is_base_of<O2, O1>::value, "Can`t match type");
 
@@ -367,7 +367,7 @@ namespace grok
     template <typename O1, typename O2, typename...Args>
     inline Delegate<O2, 0, Args...> delegate(O1* optr, void(O2::* NotifyMethod)(Args...))
     {
-        // ? ÕâÀïµÄis_convertible »áÅĞ¶ÏÒì³££¬ºóÃæĞèÒªÔÙÑĞ¾¿
+        // ? ï¿½ï¿½ï¿½ï¿½ï¿½is_convertible ï¿½ï¿½ï¿½Ğ¶ï¿½ï¿½ì³£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½Ğ¾ï¿½
         //static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
         static_assert(std::is_base_of<O2, O1>::value, "Can`t match type");
 
@@ -377,7 +377,7 @@ namespace grok
     template <typename O1, typename O2, typename...Args>
     inline Delegate<O2, 1, Args...> delegate(std::shared_ptr<O1> optr, void(O2::* NotifyMethod)(Args...))
     {
-        // ? ÕâÀïµÄis_convertible »áÅĞ¶ÏÒì³££¬ºóÃæĞèÒªÔÙÑĞ¾¿
+        // ? ï¿½ï¿½ï¿½ï¿½ï¿½is_convertible ï¿½ï¿½ï¿½Ğ¶ï¿½ï¿½ì³£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½Ğ¾ï¿½
         //static_assert(std::is_convertible<O1, O2>::value, "Can`t Convert");
         static_assert(std::is_base_of<O2, O1>::value, "Can`t match type");
 
@@ -685,5 +685,105 @@ namespace grok
     {
         std::weak_ptr<T> w = ptr;
         return  w.lock();
+    }
+
+    template<typename...Args>
+    class TraitFunction;
+
+    template<typename R, typename...Args>
+    class TraitFunction<R(Args...)>
+    {
+    public:
+        using RType = R;
+        using Params = std::tuple<Args...>;
+    };
+
+    template<typename Callback>
+    class FunctionWrapper
+    {
+    public:
+        using Helper = TraitFunction<Callback>;
+        using RType = typename Helper::RType;
+
+        FunctionWrapper() = default;
+        FunctionWrapper(std::function<Callback> f): m_cb(f) {}
+
+        template <typename...Args>
+        RType operator()(Args&& ... args)
+        {
+            assert(m_cb);
+            return m_cb(std::forward<Args>(args)...);
+        }
+
+        template <typename...Args>
+        RType notify(Args&& ... args)
+        {
+            assert(m_cb);
+            return m_cb(std::forward<Args>(args)...);
+        }
+
+        operator bool() const
+        {
+            return m_cb != nullptr;
+        }
+        void assign(std::function<Callback> f)
+        {
+            m_cb = f;
+        }
+        void reset()
+        {
+            m_cb = std::function<Callback>();//é‡ç½®
+        }
+    private:
+        std::function<Callback> m_cb;
+    };
+
+    template<typename O1, typename O2, typename R, typename...Args>
+    FunctionWrapper<R(Args...)> make_function_wrapper(O1* ptr, R(O2::*NotifyMethod)(Args...))
+    {
+        static_assert(std::is_base_of<O2, O1>::value, "Can`t Convert");
+        return FunctionWrapper<R(Args...)>([ptr, NotifyMethod](Args... args)
+        {
+            return ((*ptr).*NotifyMethod)(std::forward<Args>(args)...);
+        });
+    }
+
+    template<typename O1, typename O2, typename R, typename...Args>
+    FunctionWrapper<R(Args...)> make_function_wrapper(std::weak_ptr<O1> ptr, R(O2::* NotifyMethod)(Args...))
+    {
+        static_assert(std::is_base_of<O2, O1>::value, "Can`t Convert");
+        return FunctionWrapper<R(Args...)>([ptr, NotifyMethod](Args... args)
+        {
+            auto spr = ptr.lock();
+            if (spr)
+            {
+                return ((*spr).*NotifyMethod)(std::forward<Args>(args)...);
+            }
+            return R();
+        });
+    }
+    template<typename O1, typename O2, typename R, typename...Args>
+    FunctionWrapper<R(Args...)> make_function_wrapper(std::shared_ptr<O1> ptr, R(O2::* NotifyMethod)(Args...))
+    {
+        static_assert(std::is_base_of<O2, O1>::value, "Can`t Convert");
+        return FunctionWrapper<R(Args...)>([ptr, NotifyMethod](Args... args)
+        {
+            auto spr = ptr;
+            if (spr)
+            {
+                return ((*spr).*NotifyMethod)(std::forward<Args>(args)...);
+            }
+            return R();
+        });
+    }
+    template<typename R, typename...Args>
+    FunctionWrapper<R(Args...)> make_function_wrapper(std::function<R(Args...)> f)
+    {
+        return FunctionWrapper<R(Args...)>(f);
+    }
+    template<typename Callback>
+    FunctionWrapper<Callback> make_function_wrapper(Callback* f)
+    {
+        return FunctionWrapper<Callback>(std::function<Callback>(f));
     }
 }

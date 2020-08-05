@@ -3,10 +3,14 @@
 #include <functional>
 #include <ctime>
 #include <string>
+
+
+
 using namespace std;
 
 #include "../grok/include/grok.h"
 #include "testWorkPool.h"
+#include "configTool.h"
 
 class Controller : public grok::WorkStaff
 {
@@ -71,9 +75,18 @@ public:
 		if (cmd == "Player") {
 			TestWorkPool::Keys keys = { "Player" };
 			imInsertJob(keys, [this](MyEntry* entry) {
-				cout << "Player work:" << imGetVipNum() << endl;
+				char sqlText[1024] = {0};
+				sprintf(sqlText, "SELECT * FROM user");
+				entry->mysql_excute(sqlText, [](sql::ResultSet*res){
+					while(res->next()) {
+						cout << "username:" << res->getString("username") << endl;
+						cout << "userid:" << res->getInt("userid") << endl;
+					}
+					return 1;
+				});
+
 				return 1;
-			});
+			}).get();
 		}
 	}
 };
@@ -93,7 +106,7 @@ public:
 			TestWorkPool::Keys keys = { "Toy" };
 			imInsertJob(keys, [this](MyEntry* entry) {
 				cout << "Toy work:" << imGetVipNum() << endl;
-			});
+			}).get();
 		}
 	}
 };
@@ -104,11 +117,15 @@ int main(int argc, char** argv)
 	
 	EventPools::Init();
 
+	auto configTool = Entity::GetEntity().assign<ConfigTool>(argv[0]);
+
 	auto controller = Entity::GetEntity().assign<Controller>();
 	controller->evCmd += delegate(controller, &Controller::OnCmd);
 
 	auto workPool = Entity::GetEntity().share_assign<TestWorkPool>();
 	controller->evStart += delegate(workPool, &TestWorkPool::OnStart);
+	workPool->imGetStr = make_function_wrapper(configTool, &ConfigTool::readStr);
+	workPool->imGetNum = make_function_wrapper(configTool, &ConfigTool::readNum);
 
 	auto player = Entity::GetEntity().assign<Player>();
 	controller->evStart += delegate(player, &Player::OnStart);

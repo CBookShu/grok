@@ -5,13 +5,13 @@ cmake_minimum_required (VERSION 3.8)
 
 project ("grok")
 
-find_package(Boost REQUIRED system thread)
+find_package(Boost REQUIRED system thread filesystem)
 include_directories(BOOST_INCLUDEDIR)
 link_directories(BOOST_LIBRARYDIR)
 
 
 IF (CMAKE_SYSTEM_NAME MATCHES "Linux")
-    MESSAGE(STATUS "current platform: Linux ")
+    MESSAGE("current platform: Linux ")
 
     if("${BUILD_TYPE}" STREQUAL "Debug")
         add_definitions("-g")
@@ -27,7 +27,7 @@ IF (CMAKE_SYSTEM_NAME MATCHES "Linux")
 
     file(GLOB_RECURSE demo_cpp ${PROJECT_SOURCE_DIR}/test/*.cpp)
     add_executable(demo ${demo_cpp})
-    target_link_libraries(demo grok_lib_static pthread boost_thread boost_system mysqlcppconn)
+    target_link_libraries(demo grok_lib_static pthread boost_thread boost_system boost_filesystem  mysqlclient mysqlcppconn)
 ELSEIF  (CMAKE_SYSTEM_NAME MATCHES "Windows")
 
 
