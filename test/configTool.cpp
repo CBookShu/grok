@@ -33,3 +33,11 @@ void ConfigTool::readStr(const char*area, const char* key, std::string& str) {
 
     }
 }
+
+std::string ConfigTool::getProcessName() {
+    return processPath_.filename().string();
+}
+
+std::string ConfigTool::getProcessDir() {
+    return processPath_.parent_path().string();
+}

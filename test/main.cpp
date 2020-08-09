@@ -11,6 +11,7 @@ using namespace std;
 #include "../grok/include/grok.h"
 #include "testWorkPool.h"
 #include "configTool.h"
+#include "simpleLogService.h"
 
 class Controller : public grok::WorkStaff
 {
@@ -121,6 +122,11 @@ int main(int argc, char** argv)
 
 	auto controller = Entity::GetEntity().assign<Controller>();
 	controller->evCmd += delegate(controller, &Controller::OnCmd);
+
+	auto simpleDaiyLog = Entity::GetEntity().assign<SimpleDailyLogService>(configTool->getProcessDir().c_str(), configTool->getProcessName().c_str());
+	controller->evStart += delegate(simpleDaiyLog, &SimpleDailyLogService::OnStart);
+	controller->evStop += delegate(simpleDaiyLog, &SimpleDailyLogService::OnStop);
+	controller->evCmd += delegate(simpleDaiyLog, &SimpleDailyLogService::OnTest);
 
 	auto workPool = Entity::GetEntity().share_assign<TestWorkPool>();
 	controller->evStart += delegate(workPool, &TestWorkPool::OnStart);
