@@ -27,7 +27,7 @@ IF (CMAKE_SYSTEM_NAME MATCHES "Linux")
 
     file(GLOB_RECURSE demo_cpp ${PROJECT_SOURCE_DIR}/test/*.cpp)
     add_executable(demo ${demo_cpp})
-    target_link_libraries(demo grok_lib_static pthread boost_thread boost_system boost_filesystem  mysqlclient mysqlcppconn)
+    target_link_libraries(demo grok_lib_static pthread boost_thread boost_system boost_filesystem  mysqlclient mysqlcppconn ssl crypto)
 ELSEIF  (CMAKE_SYSTEM_NAME MATCHES "Windows")
 
 
