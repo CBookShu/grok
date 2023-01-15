@@ -3,7 +3,7 @@
 #include "../grok/grok.h"
 #include "mysqlConnector.h"
 
-struct MyEntry : public grok::WorkEntryWithCache, public MysqlSession
+struct MyEntry : public grok::WorkEntryWithCache, public grok::MysqlSession
 {
 public:
 	virtual void enterThread() override;
