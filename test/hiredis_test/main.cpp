@@ -1,7 +1,7 @@
 #include <iostream>
 #include <stdlib.h>
 #include <string.h>
-#include "hiredis.h"
+#include <hiredis/hiredis.h>
 
 using namespace std;
 

@@ -9,7 +9,8 @@
 ### 依赖库
     sudo apt-get install libmysqlclient-dev  
     sudo apt-get install libboost-dev-all  
-
+    sudo apt-get install libhiredis-dev
+    
 ### xmake 安装[一个比cmake更好用的工程管理工具]
     工程地址：https://github.com/xmake-io/xmake
 ### 安装
