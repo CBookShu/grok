@@ -26,6 +26,12 @@ target("hiredis_test")
     add_includedirs("$(projectdir)/deps/hiredis/")
     add_files("test/hiredis_test/*.cpp")
 
+target("locklist_test")
+    set_kind("binary")
+    add_deps("grok")
+    add_includedirs("$(projectdir)")
+    add_files("test/locklist_test/*.cpp")
+
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --
