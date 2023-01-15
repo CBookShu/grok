@@ -32,6 +32,12 @@ target("locklist_test")
     add_includedirs("$(projectdir)")
     add_files("test/locklist_test/*.cpp")
 
+target("unionlock_test")
+    set_kind("binary")
+    add_deps("grok")
+    add_includedirs("$(projectdir)")
+    add_files("test/unionlock_test/*.cpp")
+
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --
