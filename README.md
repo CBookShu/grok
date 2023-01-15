@@ -25,9 +25,8 @@ sudo make install
 ## grok代码编译运行
 git clone git@github.com:CBookShu/grok.git  
 cd grok  
-cmake .  
-make  
-然后就可以调试main.cpp  
+xmake
+xmake run example
 
 TODO:
 1. 将mysql和redis这样的接口最好提取出来
