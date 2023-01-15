@@ -1,0 +1,31 @@
+# 功能描述
+1. 通过Keys在单机[未来支持多进程]上进行任务细粒度的划分，解决业务锁问题
+2. 提取出event、threadpools、component等组件，可以把业务尽量的解耦合
+3. TODO: 未来会加上redis和mysql的灵活使用
+4. 目的是对过去服务端开发的经验进行一个总结
+
+# 编译说明
+## 目前的平台: Wsl2 Ubuntu18.0.4
+## 依赖库
+sudo apt-get install libmysqlclient-dev  
+sudo apt-get install libboost-dev-all  
+
+## cpp mysql sdk
+git clone -b 1.1.13 git@github.com:mysql/mysql-connector-cpp.git  
+cd mysql-connector-cpp  
+cmake .  
+make  
+sudo make install  
+
+## grok代码编译运行
+git clone git@github.com:CBookShu/grok.git  
+cd grok  
+cmake .  
+make  
+然后就可以调试main.cpp  
+
+TODO:
+1. 将mysql和redis这样的接口最好提取出来
+2. 测试纯函数调用和importfunction这样的调用的差别
+3. 脚本绑定
+4. 分布式锁替代单进程Keys
