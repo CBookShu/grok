@@ -1,5 +1,9 @@
 add_rules("mode.debug", "mode.release")
 
+target("hiredis")
+    set_kind("static")
+    add_files("deps/hiredis/*.c")
+
 target("grok")
     set_kind("static")
     add_files("grok/*.cpp")
@@ -9,16 +13,18 @@ target("example")
     set_kind("binary")
     add_deps("grok")
     set_languages("c++14")
-    add_includedirs("$(projectdir)")
     add_files("example/*.cpp")
 
 target("bench_im")
     set_kind("binary")
     add_deps("grok")
-    add_includedirs("$(projectdir)")
     add_files("test/bench_im/*.cpp")
 
-
+target("hiredis_test")
+    set_kind("binary")
+    add_deps("hiredis")
+    add_includedirs("$(projectdir)/deps/hiredis/")
+    add_files("test/hiredis_test/*.cpp")
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io

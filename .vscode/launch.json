@@ -5,7 +5,7 @@
             "name": "(gdb) 启动",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/linux/x86_64/debug/bench_im",
+            "program": "${workspaceFolder}/build/linux/x86_64/debug/hiredis_test",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
