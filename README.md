@@ -29,7 +29,7 @@
     xmake run example
 
 ## TODO:
-    1. 将mysql和redis这样的接口最好提取出来
-    2. 测试纯函数调用和importfunction这样的调用的差别
-    3. 脚本绑定
-    4. 分布式锁替代单进程Keys
+    1. dbentry，redis和Mysql的sdk连接
+    2. 服务器和客户端的通信问题
+    3. lua绑定
+    4. 业务开发
