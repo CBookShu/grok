@@ -66,12 +66,15 @@ namespace grok
 	{
 	}
 
-	void MysqlSession::mysql_set_connectInfo(const std::string &szHost, const std::string &szUser, const std::string &szPwd, const std::string &szDbName)
+	void MysqlSession::mysql_set_connectInfo(boost::string_view szHost,
+								   boost::string_view szUser,
+								   boost::string_view szPwd,
+								   boost::string_view szDbName)
 	{
-		m_szHostName = szHost;
-		m_szUser = szUser;
-		m_szPwd = szPwd;
-		m_szDbName = szDbName;
+		m_szHostName = szHost.to_string();
+		m_szUser = szUser.to_string();
+		m_szPwd = szPwd.to_string();
+		m_szDbName = szDbName.to_string();
 	}
 
 	void MysqlSession::mysql_connect()
@@ -219,5 +222,20 @@ namespace grok
 		{
 		}
 	}
+
+    bool MysqlConPool::InitDbCon(int count, boost::string_view szHost,
+								   boost::string_view szUser,
+								   boost::string_view szPwd,
+								   boost::string_view szDbName)
+    {
+		bool exp = false;
+        if(!m_init.compare_exchange_strong(exp, true)) {
+			return true;
+		}
+
+		
+
+		return true;
+    }
 
 }

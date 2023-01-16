@@ -8,6 +8,7 @@ target("grok")
 target("example")
     set_kind("binary")
     add_deps("grok")
+    add_includedirs("$(projectdir)")
     add_files("example/*.cpp")
 
 target("bench_im")
@@ -32,6 +33,15 @@ target("unionlock_test")
     add_includedirs("$(projectdir)")
     add_files("test/unionlock_test/*.cpp")
 
+-- target("hiredis")
+--     set_kind("static")
+--     add_files("deps/hiredis/*.c")
+
+target("redispool_test")
+    set_kind("binary")
+    add_includedirs("$(projectdir)")
+    add_deps("grok")
+    add_files("test/redispool_test/*.cpp")
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --

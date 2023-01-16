@@ -7,8 +7,8 @@
 
 
 using namespace std;
-
-#include "../grok/grok.h"
+#include "grok/groklog.h"
+#include "grok/grok.h"
 #include "testWorkPool.h"
 #include "configTool.h"
 #include "simpleLogService.h"
@@ -115,7 +115,6 @@ public:
 int main(int argc, char** argv)
 {
 	using namespace grok;
-	
 	EventPools::Init();
 
 	auto configTool = Entity::GetEntity().assign<ConfigTool>(argv[0]);

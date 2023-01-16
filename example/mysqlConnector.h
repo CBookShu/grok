@@ -1,9 +1,13 @@
 #include <memory>
 #include <functional>
 #include <chrono>
+#include <atomic>
 #include <cppconn/driver.h>
 #include <cppconn/statement.h>
 #include <cppconn/prepared_statement.h>
+#include <boost/noncopyable.hpp>
+#include <boost/utility/string_view.hpp>
+#include "grok/grok.h"
 
 namespace sql
 {
@@ -41,10 +45,10 @@ namespace grok
 		MysqlSession();
 		~MysqlSession();
 
-		void mysql_set_connectInfo(const std::string &szHost,
-								   const std::string &szUser,
-								   const std::string &szPwd,
-								   const std::string &szDbName);
+		void mysql_set_connectInfo(boost::string_view szHost,
+								   boost::string_view szUser,
+								   boost::string_view szPwd,
+								   boost::string_view szDbName);
 
 		void mysql_connect();
 		void mysql_close();
@@ -86,9 +90,18 @@ namespace grok
 		std::unique_ptr<sql::Connection> pCon;
 	};
 
-	// TODO: 完成连接池
-	class MysqlConPool {
+	// TODO: 继续完成pool
+	// TODO: 前去mysql官网确认threadini和threadend究竟有什么影响？
+	class MysqlConPool : boost::noncopyable {
 	public:
-		
+		MysqlConPool() = default;
+		bool InitDbCon(int count, boost::string_view szHost,
+								   boost::string_view szUser,
+								   boost::string_view szPwd,
+								   boost::string_view szDbName);
+
+	private:
+		std::atomic_bool m_init{false};
+		LockList<MysqlSession> m_pool;
 	};
 }

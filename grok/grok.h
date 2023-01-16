@@ -4,3 +4,5 @@
 #include "workPool.h"
 #include "locklist.h"
 #include "unionlock.h"
+#include "groklog.h"
+#include "redisConnector.h"
