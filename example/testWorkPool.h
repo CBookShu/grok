@@ -1,7 +1,6 @@
 #pragma once
 #include <functional>
 #include "../grok/grok.h"
-#include "mysqlConnector.h"
 
 struct MyEntry : public grok::WorkEntryWithCache/*, public grok::MysqlSession*/
 {
