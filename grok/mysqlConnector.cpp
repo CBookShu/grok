@@ -4,19 +4,19 @@
 #include <mysql/errmsg.h>
 #include <exception>
 
-// namespace grok::mysql
-// {
-//     // 定义一个私有的全局变量初始化和反初始化libmysqlclient的接口
-//     struct LibMysqlClientHelper {
-//         LibMysqlClientHelper() {
-//             mysql_library_init(0, 0, nullptr);
-//         }
-//         ~LibMysqlClientHelper() {
-//             mysql_library_end();
-//         }
-//     };
-//     LibMysqlClientHelper G_INIT_UINIT;
-// } // namespace grok::mysql
+namespace grok::mysql
+{
+    // 定义一个私有的全局变量初始化和反初始化libmysqlclient的接口
+    struct LibMysqlClientHelper {
+        LibMysqlClientHelper() {
+            mysql_library_init(0, 0, nullptr);
+        }
+        ~LibMysqlClientHelper() {
+            mysql_library_end();
+        }
+    };
+    LibMysqlClientHelper G_INIT_UINIT;
+} // namespace grok::mysql
 
 int grok::mysql::Records::GetRow()
 {
