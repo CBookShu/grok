@@ -78,13 +78,13 @@ public:
 			imInsertJob(keys, [this](MyEntry* entry) {
 				char sqlText[1024] = {0};
 				sprintf(sqlText, "SELECT * FROM user");
-				entry->mysql_excute(sqlText, [](sql::ResultSet*res){
-					while(res->next()) {
-						cout << "username:" << res->getString("username") << endl;
-						cout << "userid:" << res->getInt("userid") << endl;
-					}
-					return 1;
-				});
+				// entry->mysql_excute(sqlText, [](sql::ResultSet*res){
+				// 	while(res->next()) {
+				// 		cout << "username:" << res->getString("username") << endl;
+				// 		cout << "userid:" << res->getInt("userid") << endl;
+				// 	}
+				// 	return 1;
+				// });
 
 				return 1;
 			}).get();

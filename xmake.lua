@@ -3,7 +3,7 @@ add_rules("mode.debug", "mode.release")
 target("grok")
     set_kind("static")
     add_files("grok/*.cpp")
-    add_links("hiredis", "boost_system", "pthread", "boost_filesystem", "mysqlclient", "mysqlcppconn", "boost_thread")
+    add_links("hiredis", "boost_system", "pthread", "boost_filesystem", "mysqlclient", "boost_thread")
 
 target("example")
     set_kind("binary")
@@ -42,6 +42,13 @@ target("redispool_test")
     add_includedirs("$(projectdir)")
     add_deps("grok")
     add_files("test/redispool_test/*.cpp")
+
+
+target("libmysqlclient_test")
+    set_kind("binary")
+    add_includedirs("$(projectdir)")
+    add_files("test/libmysqlclient_test/*.cpp")
+    add_links("mysqlclient")
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --

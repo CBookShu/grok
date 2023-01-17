@@ -2,6 +2,7 @@
 #include <string.h>
 #include <mutex>
 
+#ifdef USE_MYSQLCLIENTCPP
 namespace grok
 {
 
@@ -239,3 +240,4 @@ namespace grok
     }
 
 }
+#endif // USE_MYSQLCLIENTCPP

@@ -1,3 +1,8 @@
+#pragma once
+// 经过为期两天的Mysql官网文档阅，发现纯C的接口还是简单易懂一些，没有必要搞cpp这一套
+// 此外:关于多线程的threadinit和threadend，查看源码仅在debug中会生成一些thread local data
+// 在此就不关心thread的一对接口;因为我们并不会把一个connect在多个线程并行执行，应该不会有问题。
+#ifdef USE_MYSQLCLIENTCPP
 #include <memory>
 #include <functional>
 #include <chrono>
@@ -105,3 +110,5 @@ namespace grok
 		LockList<MysqlSession> m_pool;
 	};
 }
+#endif // USE_MYSQLCLIENTCPP
+

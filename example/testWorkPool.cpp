@@ -13,7 +13,7 @@ void MyEntry::leaveThread() {
 
 void TestWorkPool::OnStart()
 {
-	grok::MysqlConnector::init();
+	// grok::MysqlConnector::init();
 	auto num = std::thread::hardware_concurrency() * 2 + 1;
 	start(num);
 }
