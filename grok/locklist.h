@@ -27,8 +27,8 @@ namespace grok {
             m_cv.wait(guard, [this](){
                 return !m_list.empty();
             });
-            T* t = m_list.back();
-            m_list.pop_back();
+            T* t = m_list.front();
+            m_list.pop_front();
             return t;
         }
         void Give(T*t) {

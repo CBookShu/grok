@@ -1,4 +1,5 @@
 #pragma once
+#include <string.h>
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -11,7 +12,7 @@
 #include "locklist.h"
 #include "groklog.h"
 
-namespace grok {
+namespace grok::redis {
 /*
     这里其实可以再仔细更进一步:
     1.  把replay全部特化出来，包括list和map对应多返回值和zset这种类型
@@ -47,21 +48,19 @@ namespace grok {
         RedisCon(RedisConfig& config);
         ~RedisCon();
 
-        redisContext* GetCtx();
-
         int RedisCmdAppend(const char* fmt, ...);
         ReplyUPtr RedisReplay();
 
-        bool CheckValid(bool resume = true);
-
-        bool Reconnect();
-
+    protected:
+        redisContext* GetCtx();
         void SetBad() {m_bad = true;}
+        bool CheckValid();
+        bool Reconnect();
     private:
         redisContext* m_ctx = nullptr;
         RedisConfig m_config;
         bool m_bad{false};
-        std::chrono::system_clock::time_point m_lastop = std::chrono::system_clock::now();
+        std::chrono::steady_clock::time_point m_lastop = std::chrono::steady_clock::now();
     };
 
     
@@ -138,18 +137,9 @@ namespace grok {
         redis的连接池
         一个redisconpool只能针对同一个ip做池，池子中的redis有互不相同的ip和port
     */
-    class RedisConPool : boost::noncopyable {
+    class RedisConPool : public LockList<RedisCon>, boost::noncopyable{
     public:
-        using LockListThis = LockList<RedisCon>;
-
-        RedisConPool() = default;
-        bool InitRedisCon(int size, RedisConfig& config);
-
-        LockListThis::Guard GetRdsConGuard() {
-            return m_pool.GetByGuard();
-        }
-    private:
-        std::atomic_bool m_init{false};
-        LockList<RedisCon> m_pool;
+        using SPtr = std::shared_ptr<RedisConPool>;
+        static SPtr Create(int size, RedisConfig& config);
     };
 }

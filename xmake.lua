@@ -49,6 +49,12 @@ target("libmysqlclient_test")
     add_includedirs("$(projectdir)")
     add_files("test/libmysqlclient_test/*.cpp")
     add_links("mysqlclient")
+
+target("mysqlpool_test")
+    set_kind("binary")
+    add_includedirs("$(projectdir)")
+    add_deps("grok")
+    add_files("test/mysqlpool_test/*.cpp")
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --

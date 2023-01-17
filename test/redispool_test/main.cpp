@@ -5,11 +5,11 @@
 #include "grok/grok.h"
 
 using namespace std;
-using namespace grok;
+using namespace grok::redis;
 std::default_random_engine ge(std::random_device{}());
 
-void threadfunc(RedisConPool* pool) {
-    auto rdscon = pool->GetRdsConGuard();
+void threadfunc(RedisConPool::SPtr pool) {
+    auto rdscon = pool->GetByGuard();
     std::uniform_int_distribution<int> u(0, 200);
     auto rdkey = u(ge);
     auto rdval = u(ge);
@@ -34,13 +34,13 @@ int main(int argc, char**argv) {
 
     const int count = 12;
 
-    RedisConPool pool;
+    RedisConPool::SPtr pool;
     RedisConfig config;
-    pool.InitRedisCon(count, config);
+    pool = RedisConPool::Create(count, config);
 
     std::thread t[count];
     for (int i = 0; i < count; ++i) {
-        t[i] = std::thread(threadfunc, &pool);
+        t[i] = std::thread(threadfunc, pool);
     }
 
     for (int i = 0; i < count; ++i) {
