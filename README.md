@@ -13,15 +13,15 @@
     
 ### xmake 安装[一个比cmake更好用的工程管理工具]
     工程地址：https://github.com/xmake-io/xmake
-### 安装
+    安装
     bash <(wget https://xmake.io/shget.text -O -)  
 
-### cpp mysql sdk
+<!-- ### cpp mysql sdk
     git clone -b 1.1.13 git@github.com:mysql/mysql-connector-cpp.git  
     cd mysql-connector-cpp  
     cmake .  
     make  
-    sudo make install  
+    sudo make install   -->
 
 ### grok代码编译运行
     git clone git@github.com:CBookShu/grok.git  
