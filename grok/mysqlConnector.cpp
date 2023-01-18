@@ -217,20 +217,76 @@ boost::optional<std::uint64_t> grok::mysql::Records::GetUInt64(const char *name)
     return GetUInt64(FindField(name));
 }
 
-boost::string_view grok::mysql::Records::GetBlob(int col, int &size)
+boost::string_view grok::mysql::Records::GetBlob(int col)
 {
     auto n = mysql_num_fields(res);
     if(col >= 0 && col < n) {
-        size = res->lengths[col];
-        return res->current_row[col];
+        return boost::string_view(res->current_row[col], res->lengths[col]) ;
     }
-    size = 0;
     return nullptr;
 }
 
-boost::string_view grok::mysql::Records::GetBlob(const char *name, int &size)
+boost::string_view grok::mysql::Records::GetBlob(const char *name)
 {
-    return GetBlob(FindField(name), size);
+    return GetBlob(FindField(name));
+}
+
+grok::mysql::SqlTextMaker grok::mysql::SqlTextMaker::Create(const char *fmt)
+{
+    SqlTextMaker stm;
+    int paramcount = 0;
+    const char *pos1 = fmt;
+    const char *pos2 = fmt;
+    const char *pend = fmt + strlen(fmt);
+    while(pos2 != pend) {
+        pos2++;
+        if(*pos1 == '?') {
+            pos1++;
+            continue;
+        }
+        if(*pos2 == '?') {
+            paramcount++;
+            stm.stmt_splice.push_back(std::string(pos1, pos2 - pos1));
+            pos1 = pos2;
+        }
+    }
+    if(*pos1 == '?') {pos1++;}
+    if(*pos2 == '?') {pos2++;}
+    if(pos2 != pos1) {
+        stm.stmt_splice.push_back(std::string(pos1, pos2 - pos1));
+    }
+    stm.params.resize(paramcount);
+    return stm;
+}
+
+std::string grok::mysql::SqlTextMaker::GetSqlText()
+{
+    std::string sqltext;
+    for (int i = 0; i < stmt_splice.size(); ++i) {
+        sqltext.append(stmt_splice[i]);
+        if(params.size() > i) {
+            sqltext.append(params[i]);
+        }
+    }
+    return sqltext;
+}
+
+void grok::mysql::SqlTextMaker::BindParam(MYSQL* con,int pos, const char *s)
+{
+    params[pos] = s;
+
+    params[pos].append("'");
+    stmt_splice[pos].append("'");
+}
+
+void grok::mysql::SqlTextMaker::BindParam(MYSQL *con, int pos, std::string &s) {
+    auto len = s.size() * 2 + 1;
+    params[pos].resize(len);
+    auto newlen = mysql_real_escape_string(con, (char*)params[pos].data(), s.data(), s.size());
+    params[pos].resize(newlen);
+    
+    params[pos].append("'");
+    stmt_splice[pos].append("'");
 }
 
 MYSQL *grok::mysql::MysqlClient::GetCtx()

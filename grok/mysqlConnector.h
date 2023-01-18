@@ -4,6 +4,7 @@
 #include <mysql/mysql.h>
 #include <boost/noncopyable.hpp>
 #include <memory>
+#include <vector>
 #include <chrono>
 #include <cstdint>
 #include <boost/optional.hpp>
@@ -27,9 +28,9 @@ namespace grok::mysql
 
 
     TODO:
-    1.  完善stmt接口
-    2.  支持二进制接口
-    3.  mysql C api还支持批量sql执行，未来看是否接入
+    1.  完善stmt接口[暂缓]
+    2.  支持二进制接口[mysql_real_escape_string,mysql_real_query]
+    3.  mysql C api还支持批量sql执行，未来看是否接入[暂缓]
 */
     
     struct MysqlConfig{
@@ -81,10 +82,46 @@ namespace grok::mysql
         boost::optional<std::int64_t> GetInt64(const char* name);
         boost::optional<std::uint64_t> GetUInt64(int col);
         boost::optional<std::uint64_t> GetUInt64(const char* name);
-        boost::string_view GetBlob(int col, int& size);
-        boost::string_view GetBlob(const char*name, int& size);
+        boost::string_view GetBlob(int col);
+        boost::string_view GetBlob(const char*name);
     };
 
+    // 制作sqltext 顺便支持二进制参数
+    // 例子:  auto stm =SqlTextMaker::Create("SELECT * FROM TABLE WHERE m = ? AND n = ? AND j = ?");
+    // stm.BindParam(0, 1); stm.BindParam(1, "text"); stm.BindParam(con, 2, std::string(...));
+    class SqlTextMaker {
+    public:
+        static SqlTextMaker Create(const char* fmt);
+        int ParamsCount() {return params.size();}
+        
+        std::string GetSqlText();
+
+        void BindParam(MYSQL* con,int pos, const char* s);
+        // 二进制数据
+        void BindParam(MYSQL* con, int pos, std::string& s);
+        template <typename T>
+        void BindParam(MYSQL* con,int pos, T t) {
+            static_assert(std::is_arithmetic<T>::value);
+            params[pos] = std::to_string(t);
+        }
+    private:
+        std::vector<std::string> stmt_splice;
+        std::vector<std::string> params;
+    };
+
+    struct ParamBindT {
+        template <typename T>
+        static void Bind(MYSQL* con, SqlTextMaker&stm, int& pos, T&& t) {
+            stm.BindParam(con, pos, t);
+        }
+
+        template <typename Head, typename...Args>
+        static void Bind(MYSQL* con, SqlTextMaker&stm, int& pos, Head&& t, Args&&...args) {
+            stm.BindParam(con, pos++, t);
+            ParamBindT::Bind(con, stm, pos, std::forward<Args>(args)...);
+        }
+    };
+    
     class MysqlClient : boost::noncopyable {
     public:
         MysqlClient(MysqlConfig& config):m_config(config){}
@@ -92,9 +129,8 @@ namespace grok::mysql
         // 返回值是:mysql_affected_rows() 影响的行数
         int Query(const char* sql);
         Records QueryResult(const char* sql);
-
-    protected:
         MYSQL* GetCtx();
+    protected:
         bool CheckValid();
         bool Reconnect();
         int QueryWithCtx(MYSQL* ctx, const char* sql);
@@ -115,5 +151,24 @@ namespace grok::mysql
 
         int Query(const char* sql);
         Records QueryResult(const char* sql);
+
+        template <typename ...Args>
+        int QueryStm(const char* sql, Args&&...args) {
+            auto stm = SqlTextMaker::Create(sql);
+            int pos = 0;
+            auto g = GetByGuard();
+            ParamBindT::Bind(g->GetCtx(), stm, pos, std::forward<Args>(args)...);
+            auto sqltext = stm.GetSqlText();
+            return g->Query(sqltext.c_str());
+        }
+        template <typename ...Args>
+        Records QueryStmResult(const char* sql, Args&&...args) {
+            auto stm = SqlTextMaker::Create(sql);
+            int pos = 0;
+            auto g = GetByGuard();
+            ParamBindT::Bind(g->GetCtx(), stm, pos, std::forward<Args>(args)...);
+            auto sqltext = stm.GetSqlText();
+            return g->QueryResult(sqltext.c_str());
+        }
     };
 } // namespace grok

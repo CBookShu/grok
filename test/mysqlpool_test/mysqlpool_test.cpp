@@ -10,11 +10,12 @@ std::default_random_engine ge(std::random_device{}());
 
 static void test_datasetget(MysqlPool::SPtr pool) {
     // 准备数据库
+    assert(pool->Query("DROP table IF EXISTS testtable") != -1);
     assert(pool->Query("CREATE TABLE IF NOT EXISTS `testtable` (\
         `n1` int(11) DEFAULT NULL,\
-        `s2` varchar(255) DEFAULT NULL\
+        `s2` varchar(255) DEFAULT NULL,\
+        `b3` blob\
         ) ENGINE=InnoDB DEFAULT CHARSET=latin1;") != -1);
-    assert(pool->Query("TRUNCATE testtable") != -1);
 
     // 添加数据
     assert(pool->Query("INSERT INTO testtable (n1,s2) VALUES(1, 'hello1')") == 1);
@@ -55,6 +56,15 @@ static void test_datasetget(MysqlPool::SPtr pool) {
     assert(3 == result.GetInt32(0));
     assert(result.IsNull(1));
 
+    // 二进制解析
+    assert(pool->QueryStm("INSERT INTO testtable (n1,s2,b3) VALUES(?,?,?)", 
+    4, "hello4", std::string("sdfsdf")) == 1);
+    result = pool->QueryResult("SELECT * FROM testtable WHERE n1 = 4");
+    if(result.Next()) {
+        assert(4 == result.GetInt32(0));
+        assert(result.GetString(1) == "hello4");
+        assert(result.GetBlob(2) == "sdfsdf");
+    }
 }
 
 int main(int argc, char** argv) {
