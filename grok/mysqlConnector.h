@@ -7,6 +7,7 @@
 #include <chrono>
 #include <cstdint>
 #include <boost/optional.hpp>
+#include <boost/utility/string_view.hpp>
 #include "locklist.h"
 
 namespace grok::mysql
@@ -49,25 +50,27 @@ namespace grok::mysql
         }
     };
 
-    struct Records {
+    struct Records : boost::noncopyable {
+        // res一旦被构建传入，外部不要对它进行任何申明周期的控制
+        // 这里之所以放在public上，纯粹是因为mysql的接口非常多，留着res方便使用
         MYSQL_RES* res = nullptr;
-        // lens 是通过 mysql_fetch_lengths 计算得到的，缓存一下
-        int* lens = nullptr;
 
-        Records(MYSQL_RES *r):res(r){}
-        ~Records() {if(res) {mysql_free_result(res);}}
+        Records(MYSQL_RES *r);
+        ~Records();
+        Records(Records&& other);
+        Records& operator=(Records&& other);
 
         int GetRow();
         bool Next();
         // 这里获取field不再像官方cpp包里获取时自动缓存field:cor
         // 因为我认为col的数量一般很小，遍历速度也是够了
         MYSQL_FIELD* FindFieldInfo(int col);
-        const char* FindField(int col);
+        boost::string_view FindField(int col);
         int FindField(const char* name);
         bool IsNull(int col);
         bool IsNull(const char* name);
-        const char* GetString(int col);
-        const char* GetString(const char* name);
+        boost::string_view GetString(int col);
+        boost::string_view GetString(const char* name);
         boost::optional<long double> GetDouble(int col);
         boost::optional<long double> GetDouble(const char* name);
         boost::optional<std::int32_t> GetInt32(int col);
@@ -78,8 +81,8 @@ namespace grok::mysql
         boost::optional<std::int64_t> GetInt64(const char* name);
         boost::optional<std::uint64_t> GetUInt64(int col);
         boost::optional<std::uint64_t> GetUInt64(const char* name);
-        const char* GetBlob(int col, int& size);
-        const char* GetBlob(const char*name, int& size);
+        boost::string_view GetBlob(int col, int& size);
+        boost::string_view GetBlob(const char*name, int& size);
     };
 
     class MysqlClient : boost::noncopyable {
@@ -109,5 +112,8 @@ namespace grok::mysql
     public:
         using SPtr = std::shared_ptr<MysqlPool>;
         static SPtr Create(int size, MysqlConfig& config);
+
+        int Query(const char* sql);
+        Records QueryResult(const char* sql);
     };
 } // namespace grok

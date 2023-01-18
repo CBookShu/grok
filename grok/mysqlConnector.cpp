@@ -18,6 +18,23 @@ namespace grok::mysql
     LibMysqlClientHelper G_INIT_UINIT;
 } // namespace grok::mysql
 
+grok::mysql::Records::Records(MYSQL_RES *r):res(r) {}
+
+grok::mysql::Records::~Records() {
+    if(res) {
+        mysql_free_result(res);
+    }
+}
+
+grok::mysql::Records::Records(Records &&other) {
+    std::swap(res, other.res);
+}
+
+grok::mysql::Records &grok::mysql::Records::operator=(Records &&other)
+{
+    std::swap(res, other.res);
+}
+
 int grok::mysql::Records::GetRow()
 {
     return mysql_num_rows(res);
@@ -42,7 +59,7 @@ MYSQL_FIELD *grok::mysql::Records::FindFieldInfo(int col)
     return nullptr;
 }
 
-const char *grok::mysql::Records::FindField(int col)
+boost::string_view grok::mysql::Records::FindField(int col)
 {
     MYSQL_FIELD* fields = mysql_fetch_fields(res);
     auto n = mysql_num_fields(res);
@@ -78,7 +95,7 @@ bool grok::mysql::Records::IsNull(const char *name)
     return IsNull(FindField(name));
 }
 
-const char *grok::mysql::Records::GetString(int col)
+boost::string_view grok::mysql::Records::GetString(int col)
 {
     auto n = mysql_num_fields(res);
     if(col >= 0 && col < n) {
@@ -87,7 +104,7 @@ const char *grok::mysql::Records::GetString(int col)
     return nullptr;
 }
 
-const char *grok::mysql::Records::GetString(const char *name)
+boost::string_view grok::mysql::Records::GetString(const char *name)
 {
     return GetString(FindField(name));
 }
@@ -97,12 +114,12 @@ struct ConverStringToOptionalData {
     template<typename F>
     static boost::optional<T> Convert(grok::mysql::Records* res,int col, F f) {
             try {
-                const char* s = res->GetString(col);
-                if(!s) {
+                auto s = res->GetString(col);
+                if(s.empty()) {
                     return boost::optional<T>();
                 }
                 char *es;
-                T d = f(s);
+                T d = f(s.data());
                 return boost::optional<T>(boost::in_place_init, d);
             } catch(...) {
                 return boost::optional<T>();
@@ -132,7 +149,7 @@ boost::optional<std::int32_t> grok::mysql::Records::GetInt32(int col)
 {
     auto f = [](const char* s){
         char* es;
-        long double d = std::strtoll(s, &es, 10);
+        std::int32_t d = std::strtoll(s, &es, 10);
         if(es == s) {
             throw std::bad_cast();
         }
@@ -150,7 +167,7 @@ boost::optional<std::uint32_t> grok::mysql::Records::GetUInt32(int col)
 {
     auto f = [](const char* s){
         char* es;
-        long double d = std::strtoull(s, &es, 10);
+        std::uint32_t d = std::strtoull(s, &es, 10);
         if(es == s) {
             throw std::bad_cast();
         }
@@ -168,7 +185,7 @@ boost::optional<std::int64_t> grok::mysql::Records::GetInt64(int col)
 {
     auto f = [](const char* s){
         char* es;
-        long double d = std::strtoll(s, &es, 10);
+        std::int64_t d = std::strtoll(s, &es, 10);
         if(es == s) {
             throw std::bad_cast();
         }
@@ -186,7 +203,7 @@ boost::optional<std::uint64_t> grok::mysql::Records::GetUInt64(int col)
 {
     auto f = [](const char* s){
         char* es;
-        long double d = std::strtoull(s, &es, 10);
+        std::uint64_t d = std::strtoull(s, &es, 10);
         if(es == s) {
             throw std::bad_cast();
         }
@@ -200,7 +217,7 @@ boost::optional<std::uint64_t> grok::mysql::Records::GetUInt64(const char *name)
     return GetUInt64(FindField(name));
 }
 
-const char *grok::mysql::Records::GetBlob(int col, int &size)
+boost::string_view grok::mysql::Records::GetBlob(int col, int &size)
 {
     auto n = mysql_num_fields(res);
     if(col >= 0 && col < n) {
@@ -211,7 +228,7 @@ const char *grok::mysql::Records::GetBlob(int col, int &size)
     return nullptr;
 }
 
-const char *grok::mysql::Records::GetBlob(const char *name, int &size)
+boost::string_view grok::mysql::Records::GetBlob(const char *name, int &size)
 {
     return GetBlob(FindField(name), size);
 }
@@ -239,7 +256,8 @@ grok::mysql::Records grok::mysql::MysqlClient::QueryResult(const char *sql)
     QueryWithCtx(ctx, sql);
      
     MYSQL_RES* res = mysql_store_result(ctx);
-    return Records(res);
+    Records record(res);
+    return record;
 }
 
 bool grok::mysql::MysqlClient::CheckValid()
@@ -315,7 +333,7 @@ int grok::mysql::MysqlClient::QueryWithCtx(MYSQL *ctx, const char *sql)
             // 已经error了
             DBG("MYSQL QUERY SQLTEXT:%s", sql);
             DBG("MYSQL QUERY ERROR:%d,%s", mysql_errno(ctx), mysql_error(ctx));
-            break;
+            return -1;
         }
         // 到了这里，就说明query执行完成
     } while (0);
@@ -330,4 +348,14 @@ grok::mysql::MysqlPool::SPtr grok::mysql::MysqlPool::Create(int size, MysqlConfi
     }
     return res;
 
+}
+
+int grok::mysql::MysqlPool::Query(const char *sql)
+{
+    return GetByGuard()->Query(sql);
+}
+
+grok::mysql::Records grok::mysql::MysqlPool::QueryResult(const char *sql)
+{
+    return GetByGuard()->QueryResult(sql);
 }

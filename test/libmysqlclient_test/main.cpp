@@ -18,7 +18,15 @@ int main(int argc, char** argv) {
     unsigned long* len;
 
     con = mysql_init(nullptr);
-    if(!mysql_real_connect(con, "localhost", "cbookshu", "cs123456", "test", 3306, nullptr, 0)) {
+    if(!mysql_real_connect(con, "localhost", "cbookshu", "cs123456", "", 3306, nullptr, 0)) {
+        cout << "error" << mysql_error(con) << endl;
+        goto exist;
+    }
+    if(mysql_query(con, "CREATE DATABASE IF NOT EXISTS test")) {
+        cout << "error" << mysql_error(con) << endl;
+        goto exist;
+    }
+    if(mysql_query(con, "USE test")) {
         cout << "error" << mysql_error(con) << endl;
         goto exist;
     }
@@ -31,13 +39,16 @@ int main(int argc, char** argv) {
         cout << "error" << mysql_error(con) << endl;
         goto exist;
     }
+    if(mysql_query(con,"TRUNCATE testtable")) {
+        cout << "error" << mysql_error(con) << endl;
+        goto exist;
+    }
+    if(mysql_query(con, "INSERT INTO testtable VALUES(1, 'test')")) {
+        cout << "error" << mysql_error(con) << endl;
+        goto exist;
+    }
 
-    // if(mysql_query(con, "INSERT INTO testtable VALUES(1, 'test', '2023-01-17')")) {
-    //     cout << "error" << mysql_error(con) << endl;
-    //     goto exist;
-    // }
-
-    if(mysql_query(con, "SELECT * FROM testtable1")) {
+    if(mysql_query(con, "SELECT * FROM testtable")) {
         cout << "error" << mysql_error(con) << endl;
         goto exist;
     } 
