@@ -121,13 +121,13 @@ namespace grok::mysql
         MysqlClient(MysqlConfig& config):m_config(config){}
 
         // 返回值是:mysql_affected_rows() 影响的行数
-        int Query(const char* sql);
-        Records QueryResult(const char* sql);
+        int Query(const char* sql, int size = 0);
+        Records QueryResult(const char* sql, int size = 0);
         MYSQL* GetCtx();
     protected:
         bool CheckValid();
         bool Reconnect();
-        int QueryWithCtx(MYSQL* ctx, const char* sql);
+        int QueryWithCtx(MYSQL* ctx, const char* sql, int size);
     private:
         MysqlConfig m_config;
         MYSQL* m_ctx = nullptr;
@@ -153,7 +153,7 @@ namespace grok::mysql
             auto g = GetByGuard();
             ParamBindT::Bind(g->GetCtx(), stm, pos, std::forward<Args>(args)...);
             auto sqltext = stm.GetSqlText();
-            return g->Query(sqltext.c_str());
+            return g->Query(sqltext.c_str(), sqltext.size());
         }
         template <typename ...Args>
         Records QueryStmResult(const char* sql, Args&&...args) {
@@ -162,7 +162,7 @@ namespace grok::mysql
             auto g = GetByGuard();
             ParamBindT::Bind(g->GetCtx(), stm, pos, std::forward<Args>(args)...);
             auto sqltext = stm.GetSqlText();
-            return g->QueryResult(sqltext.c_str());
+            return g->QueryResult(sqltext.c_str(), sqltext.size());
         }
     };
 } // namespace grok

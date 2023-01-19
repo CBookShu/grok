@@ -298,18 +298,20 @@ MYSQL *grok::mysql::MysqlClient::GetCtx()
     return nullptr;
 }
 
-int grok::mysql::MysqlClient::Query(const char *sql)
+int grok::mysql::MysqlClient::Query(const char *sql, int size)
 {
     auto* ctx = GetCtx();
     assert(ctx != nullptr);
-    return QueryWithCtx(ctx, sql);
+    size = size ? size : strlen(sql);
+    return QueryWithCtx(ctx, sql, size);
 }
 
-grok::mysql::Records grok::mysql::MysqlClient::QueryResult(const char *sql)
+grok::mysql::Records grok::mysql::MysqlClient::QueryResult(const char *sql, int size)
 {
     auto ctx = GetCtx();
     assert(ctx != nullptr);
-    QueryWithCtx(ctx, sql);
+    size = size ? size : strlen(sql);
+    QueryWithCtx(ctx, sql, size);
      
     MYSQL_RES* res = mysql_store_result(ctx);
     Records record(res);
@@ -370,7 +372,7 @@ final:
     return false;
 }
 
-int grok::mysql::MysqlClient::QueryWithCtx(MYSQL *ctx, const char *sql)
+int grok::mysql::MysqlClient::QueryWithCtx(MYSQL *ctx, const char *sql, int size)
 {
     // mysql 有些操作是可以重试的！【至少看源码是这么操作的】
     // 但是我们就重试一次即可
@@ -378,7 +380,7 @@ int grok::mysql::MysqlClient::QueryWithCtx(MYSQL *ctx, const char *sql)
     bool hasretry = false;
     do
     {
-        auto err = mysql_query(ctx, sql);
+        auto err = mysql_real_query(ctx, sql, size);
         if(err) {
             if(err == CR_SERVER_LOST && !hasretry) {
                 // 这里直接用ping重连

@@ -55,6 +55,12 @@ target("mysqlpool_test")
     add_includedirs("$(projectdir)")
     add_deps("grok")
     add_files("test/mysqlpool_test/*.cpp")
+
+target("netserver_test")
+    set_kind("binary")
+    add_includedirs("$(projectdir)")
+    add_deps("grok")
+    add_files("test/netserver_test/*.cpp")
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --
