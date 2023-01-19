@@ -135,7 +135,7 @@ namespace grok::redis {
 
     /*
         redis的连接池
-        一个redisconpool只能针对同一个ip做池，池子中的redis有互不相同的ip和port
+        一个redisconpool只能针对同一个ip做池，不允许其中有各不相同IP和PORT
     */
     class RedisConPool : public LockList<RedisCon>, boost::noncopyable{
     public:

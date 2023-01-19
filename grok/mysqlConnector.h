@@ -25,12 +25,6 @@ namespace grok::mysql
     于是再经过一些示例的编写后，打算开始封装它
     此外对于Records的操作，都建立在MYSQL_RES 内存上的
     返回的各种值都是建立在Records 生命周期之内
-
-
-    TODO:
-    1.  完善stmt接口[暂缓]
-    2.  支持二进制接口[mysql_real_escape_string,mysql_real_query]
-    3.  mysql C api还支持批量sql执行，未来看是否接入[暂缓]
 */
     
     struct MysqlConfig{
