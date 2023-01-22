@@ -101,7 +101,7 @@ bool grok::redis::RedisCon::Reconnect()
 
     if(!m_config.auth.empty()) {
         // 密码校验
-        RedisCmdAppend("AUTO %s", m_config.auth.c_str());
+        RedisCmdAppend("AUTH %s", m_config.auth.c_str());
     }
 
     m_bad = false;

@@ -46,7 +46,7 @@ namespace grok::mysql
     };
 
     struct Records : boost::noncopyable {
-        // res一旦被构建传入，外部不要对它进行任何申明周期的控制
+        // res一旦被构建传入，外部不要对它进行任何生命周期的控制
         // 这里之所以放在public上，纯粹是因为mysql的接口非常多，留着res方便使用
         MYSQL_RES* res = nullptr;
 
