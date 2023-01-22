@@ -61,6 +61,13 @@ target("netserver_test")
     add_includedirs("$(projectdir)")
     add_deps("grok")
     add_files("test/netserver_test/*.cpp")
+
+target("protobuf_test")
+    set_kind("binary")
+    add_includedirs("$(projectdir)")
+    add_links("protobuf")
+    add_files("test/protobuf_test/*.cpp")
+    add_files("test/protobuf_test/*.cc")
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --

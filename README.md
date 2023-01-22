@@ -10,6 +10,7 @@
     sudo apt-get install libmysqlclient-dev  
     sudo apt-get install libboost-all-dev  
     sudo apt-get install libhiredis-dev
+    sudo apt install libprotobuf-dev protobuf-compiler
     
 ### xmake 安装[一个比cmake更好用的工程管理工具]
 #### 工程地址：https://github.com/xmake-io/xmake  
