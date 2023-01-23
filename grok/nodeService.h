@@ -23,6 +23,9 @@ namespace grok
         using SPtr = std::shared_ptr<NodeCenter>;
         
         static SPtr Create(boost::asio::io_service& iov, boost::asio::ip::tcp::endpoint ep);
+        NetServer::SPtr get_server() {
+            return m_net_server;
+        }
         
     protected:
         // 网络事件
