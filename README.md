@@ -41,9 +41,6 @@
     xmake run 
 
 ## TODO:
-    1. dbentry，redis和Mysql的sdk连接
-    2. 服务器和客户端的通信问题
+    1. redis异步同步mysql功能
+    2. 简单业务开发示例
     3. lua绑定
-    4. 业务开发
-    5. mysql和redis接口的测试用例
-    6. 接入Pb之后测试redis和Mysql的二进制接口
