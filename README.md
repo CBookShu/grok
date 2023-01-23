@@ -10,7 +10,7 @@
     8. redisConnector redis pool 用例:test/redispool_test/redispool_test.cpp
     9. unionlock 一个本地化的多字符串锁 用例:test/unionlock_test/unionlock_test.cpp
     10. workPool 定制化的线程池，支持缓存、联锁。【TODO:用例】
-
+    11. utils 包含: 类型安全的读写锁。【TODO: 用例】
 
 # 编译说明
 ### 目前的平台: Wsl2 Ubuntu18.0.4
