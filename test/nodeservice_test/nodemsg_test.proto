@@ -1,0 +1,11 @@
+syntax = "proto3";
+package nodemsg_test;
+
+message TestReq1 {
+    string req = 1;
+}
+
+message TestRsp1 {
+    int32 status = 1;
+    string rsp = 2;
+}

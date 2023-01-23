@@ -59,6 +59,7 @@ namespace grok {
         EventNoMutex<Ptr, boost::system::error_code> evClose;
         EventNoMutex<Ptr, const char*, std::size_t> evMsg;
 
+        std::uint64_t m_token = -1;
         PacketProtocolBase::SPtr m_packptr;
         boost::asio::ip::tcp::socket m_sock;
         SimpleStream m_readbuf;
@@ -72,7 +73,8 @@ namespace grok {
 
         std::string to_string();
 
-        void start() ;
+        void start();
+        void stop();
         void write(const char*s, std::size_t n);
         template<typename F>
         void dispatch(F &&f) {
@@ -81,9 +83,12 @@ namespace grok {
     protected:
         void do_write();
         void do_read();
+        void do_close(boost::system::error_code ec = {});
     };
 
     struct NetServer : boost::noncopyable, public std::enable_shared_from_this<NetServer> {
+        using SPtr = std::shared_ptr<NetServer>;
+
         std::atomic_uint32_t m_cur{0};
         std::atomic_bool m_running{false};
         boost::asio::io_service& m_iosvr;
@@ -92,12 +97,16 @@ namespace grok {
         boost::asio::ip::tcp::acceptor m_accepter;
         PacketProtocolBase::SPtr m_packptr;
 
+        EventNoMutex<Session::Ptr> evConnect;
+        EventNoMutex<Session::Ptr, boost::system::error_code> evClose;
+        EventNoMutex<Session::Ptr, const char*, std::size_t> evMsg;
+
         NetServer(boost::asio::io_service& iov);
         ~NetServer();
 
         void set_packet_protocol(PacketProtocolBase::SPtr p);
 
-        void start(int port, int thread);
+        void start(boost::asio::ip::tcp::endpoint ep, int thread);
 
         void stop();
 
@@ -111,14 +120,17 @@ namespace grok {
         void on_newsession(Session::Ptr session) {
             auto key = session->to_string();
             DBG("NEWSESSION %s", key.c_str());
+            evConnect(session);
         }
         void on_closesession(Session::Ptr session, boost::system::error_code ec) {
             auto key = session->to_string();
             DBG("CLOSESESSION %s[%s]", key.c_str(), ec.message().c_str());
+            evClose(session, ec);
         }
         void on_msg(Session::Ptr session, const char* s, std::size_t n) {
             auto key = session->to_string();
-            DBG("MSG %s[%s]",key.c_str(), std::string(s, n).c_str());
+            // DBG("MSG %s[%s]",key.c_str(), std::string(s, n).c_str());
+            evMsg(session, s, n);
         }
     protected:
         void do_accept();

@@ -1,0 +1,27 @@
+syntax = "proto3";
+package nodeService;
+
+enum RegistorResultType {
+    eRegister_OK = 0;
+    eRegister_ParamErr = 1;
+}
+
+message RspNodeRegistor {
+    RegistorResultType status = 1;
+}
+
+enum MsgType {
+    eMsg_none = 0;
+    eMsg_request = 1;
+    eMsg_response = 2;
+    eMsg_notify = 3;
+}
+
+message MsgPack {
+    string source = 1;
+    string dest = 2;
+    int32 msgid = 3;
+    MsgType msgtype = 4;
+    int32 sessionid = 5;
+    bytes pbdata = 6;
+}

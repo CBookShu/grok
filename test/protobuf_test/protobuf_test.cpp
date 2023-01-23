@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include "proto_test.pb.h"
+#include "grok/pb/nodeService.pb.h"
 
 using namespace std;
 
@@ -33,5 +34,6 @@ int main(int argc, char** argv) {
             printf("name:%s,age:%d,male:%d\r\n", p.name().c_str(), p.age(), p.male());
         }
     }
+
     return 0;
 }

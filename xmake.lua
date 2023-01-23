@@ -3,7 +3,8 @@ add_rules("mode.debug", "mode.release")
 target("grok")
     set_kind("static")
     add_files("grok/*.cpp")
-    add_links("hiredis", "boost_system", "pthread", "boost_filesystem", "mysqlclient", "boost_thread")
+    add_files("grok/pb/*.cc")
+    add_links("hiredis","protobuf","boost_system", "pthread", "boost_filesystem", "mysqlclient", "boost_thread")
 
 target("example")
     set_kind("binary")
@@ -68,6 +69,15 @@ target("protobuf_test")
     add_links("protobuf")
     add_files("test/protobuf_test/*.cpp")
     add_files("test/protobuf_test/*.cc")
+    add_files("grok/pb/*.cc")
+
+target("nodeservice_test")
+    set_kind("binary")
+    add_includedirs("$(projectdir)")
+    add_deps("grok")
+    add_files("test/nodeservice_test/*.cpp")
+    add_files("test/nodeservice_test/*.cc")
+
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --

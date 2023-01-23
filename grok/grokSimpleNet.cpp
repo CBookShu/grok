@@ -11,14 +11,15 @@ using namespace grok;
 using namespace boost;
 using boost::asio::ip::tcp;
 
-static std::uint64_t MakeToken()
+static std::uint64_t MakeSessionToken()
 {
-    static std::atomic_int64_t gID{0};
-    return gID.fetch_add(1);
+    static std::atomic_uint64_t gID{0};
+    auto id = gID.fetch_add(1);
+    return id;
 }
 
 grok::Session::Session(asio::io_service& iosvr):
-m_sock(iosvr),m_write_buf_idx(-1) {
+m_sock(iosvr),m_write_buf_idx(-1),m_token(MakeSessionToken()) {
 }
 
 grok::Session::~Session() {
@@ -65,6 +66,17 @@ void Session::start()
     do_read();
 }
 
+void grok::Session::stop()
+{
+    auto self = shared_from_this();
+    dispatch([self](){
+        // 主动干掉自己
+        if(self->m_sock.is_open()) {
+            self->m_sock.close();
+        }
+    });
+}
+
 void grok::Session::write(const char *s, std::size_t n)
 {
     auto self = shared_from_this();
@@ -85,17 +97,14 @@ void grok::Session::write(const char *s, std::size_t n)
     });
 }
 
-void grok::Session::do_write() {
+void grok::Session::do_write()
+{
     auto self = shared_from_this();
     asio::async_write(m_sock, m_writebuf[m_write_buf_idx].bufferdata(), 
         [self, this](boost::system::error_code ec, std::size_t sz){
             if(ec) {
-                DBG("Read Error:%s", ec.message().c_str());
-                if(ec == asio::error::interrupted
-                || ec == asio::error::eof) {
-                    evClose(self, ec);
-                    return;
-                }
+                do_close();
+                return;
             }
             if(sz > 0) {
                 m_writebuf[m_write_buf_idx].consume(sz);
@@ -117,17 +126,13 @@ void grok::Session::do_write() {
     });
 }
 
-void grok::Session::do_read() {
+void grok::Session:: do_read() {
     auto self = shared_from_this();
     asio::async_read(m_sock, m_readbuf.prepare(4096), asio::transfer_at_least(4), 
         [this, self](boost::system::error_code ec, std::size_t sz) {
             if(ec) {
-                DBG("Read Error:%s", ec.message().c_str());
-                if(ec == asio::error::interrupted
-                || ec == asio::error::eof) {
-                    evClose(self, ec);
-                    return;
-                }
+                do_close();
+                return;
             }
             if(sz > 0) {
                 m_readbuf.commit(sz);
@@ -145,6 +150,21 @@ void grok::Session::do_read() {
             do_read(); 
         }
     );
+}
+
+void grok::Session::do_close(boost::system::error_code ec)
+{
+    DBG("Read Error:%s", ec.message().c_str());
+    // 准备关闭该会话
+    evClose(shared_from_this(), ec);
+    if(m_sock.is_open()) {
+        m_sock.close();
+    }
+    m_token = -1;
+    m_write_buf_idx = -1;
+    m_readbuf.clear();
+    m_writebuf[0].clear();
+    m_writebuf[1].clear();
 }
 
 grok::NetServer::NetServer(boost::asio::io_service& iov):m_iosvr(iov), m_accepter(iov) {
@@ -167,7 +187,7 @@ void grok::NetServer::set_packet_protocol(PacketProtocolBase::SPtr p)
     }
 }
 
-void grok::NetServer::start(int port, int thread)
+void grok::NetServer::start(boost::asio::ip::tcp::endpoint ep, int thread)
 {
     bool r = false;
     if (!m_running.compare_exchange_strong(r, true))
@@ -179,7 +199,7 @@ void grok::NetServer::start(int port, int thread)
             m_packptr = std::make_shared<PacketProtocolBase>();
         }
         
-        m_accepter = tcp::acceptor(m_iosvr, tcp::endpoint(tcp::v4(), port));
+        m_accepter = tcp::acceptor(m_iosvr, ep);
 
         m_thread_pools.resize(thread);
         for (int i = 0; i < thread; ++i)
