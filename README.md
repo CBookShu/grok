@@ -44,3 +44,4 @@
     1. redis异步同步mysql功能
     2. 简单业务开发示例
     3. lua绑定
+    4. node client消息绑定可以把msgid改为pbtype
