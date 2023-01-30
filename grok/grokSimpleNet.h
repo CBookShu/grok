@@ -69,7 +69,7 @@ namespace grok {
         Session(boost::asio::io_service& iosvr);
         ~Session();
 
-        static Ptr Connect(boost::asio::io_service&iosvr, boost::asio::ip::tcp::endpoint ep, PacketProtocolBase::SPtr protocl = nullptr);
+        static Ptr Connect(boost::asio::io_service&iosvr, const char *ip, int port, PacketProtocolBase::SPtr protocl = nullptr);
 
         std::string to_string();
 
@@ -106,13 +106,16 @@ namespace grok {
 
         void set_packet_protocol(PacketProtocolBase::SPtr p);
 
-        void start(boost::asio::ip::tcp::endpoint ep, int thread);
+        void start(int port, int thread);
 
         void stop();
 
-        std::shared_ptr<boost::asio::io_service> iosvr_byidx(std::uint32_t idx) {
-            return m_iosvr_pools[idx];
+        boost::asio::io_service& iosvr_byidx(std::uint32_t idx) {
+            return *m_iosvr_pools[idx];
         }
+
+        boost::asio::io_service& iosvr_rnd();
+
         boost::asio::io_service& iosvr_main() {
             return m_iosvr;
         }

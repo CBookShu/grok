@@ -9,57 +9,57 @@ using boost::asio::ip::tcp;
 using namespace grok;
 
 
-static int msg_test_1 = NODE_SERVICE_CUSTOM + 1;
 // client1 send msg_test_1<nodemsg_test::TestReq1> to client2
 // client2 response msg_test_1<nodemsg_test::TestRsp1> to client1
 class TestPb {
 public:
-    void regster_client1(NodeClient::SPtr client) {
-        NODE_SERVICE_REGISTER_MSG(client, msg_test_1, nodemsg_test::TestRsp1, on_client1);
+    void regster_client1(MsgCenterSPtr msgcenter) {
+        AUTO_REGISTER_PBMSG_2(msgcenter, nodemsg_test::TestRsp1, on_client1);
     }
-    void regster_client2(NodeClient::SPtr client) {
-        NODE_SERVICE_REGISTER_MSG(client, msg_test_1, nodemsg_test::TestReq1, on_client2);
+    void regster_client2(MsgCenterSPtr msgcenter) {
+        AUTO_REGISTER_PBMSG_1(msgcenter, nodemsg_test::TestReq1, nodemsg_test::TestRsp1, on_client2);
     }
     
-    void on_client1(NodeClient::SPtr c, nodeService::MsgPack* p, nodemsg_test::TestRsp1& rsp) {
-        rsp.PrintDebugString();
+    void on_client1(nodemsg_test::TestRsp1* rsp) {
+        rsp->PrintDebugString();
     }
-    void on_client2(NodeClient::SPtr c, nodeService::MsgPack* p, nodemsg_test::TestReq1& req) {
-        req.PrintDebugString();
-
-        // 返回rsp
-        nodemsg_test::TestRsp1 rsp;
-        rsp.set_rsp("world");
-        auto s = rsp.SerializeAsString();
-        c->send_response(p, s.data(), s.size());
+    void on_client2(nodemsg_test::TestReq1* req,nodemsg_test::TestRsp1* rsp) {
+        req->PrintDebugString();
+        rsp->set_rsp("world");
     }
 };
 
 int main(int argc, char** argv) {
+    auto msgcenter = grok::MsgCenter::Create();
+
     asio::io_service iov;
-    auto ep = tcp::endpoint(tcp::v4(), 9595);
-    auto center = grok::NodeCenter::Create(iov, ep);
+    const char* ip = "127.0.0.1";
+    int port = 9595;
+    auto center = grok::NodeCenter::Create(iov, port);
+    center->regsiter_msgcenter(msgcenter);
+
     TestPb test;
 
-    std::thread t1([ep,&test](){
+    std::thread t1([&](){
         asio::io_service iov;
-        auto client = grok::NodeClient::Create(iov, ep, "test1");
-        test.regster_client1(client);
+        auto client = grok::NodeClient::Create(iov, ip, port, "test1");
+        client->regsiter_msgcenter(msgcenter);
+        test.regster_client1(msgcenter);
         asio::basic_waitable_timer<std::chrono::steady_clock> w(iov);
         w.expires_from_now(std::chrono::seconds(2));
         w.async_wait([client](boost::system::error_code ec){
             nodemsg_test::TestReq1 req;
             req.set_req("hello");
-            auto s = req.SerializeAsString();
-            client->send_notify(msg_test_1, "test2", s.data(), s.size());
+            client->send_request_pb<nodemsg_test::TestReq1>("test2", &req);
         });
         iov.run();
         return ;
     });
-    std::thread t2([ep,&test](){
+    std::thread t2([&](){
         asio::io_service iov;
-        auto client = grok::NodeClient::Create(iov, ep, "test2");
-        test.regster_client2(client);
+        auto client = grok::NodeClient::Create(iov, ip, port, "test2");
+        client->regsiter_msgcenter(msgcenter);
+        test.regster_client2(msgcenter);
         iov.run();
         return ;
     });

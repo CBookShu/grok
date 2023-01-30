@@ -6,6 +6,10 @@
 
 namespace grok {
 
+    struct GrokRunable {
+        virtual void run() = 0;
+    };
+
     template <typename T>
     class LockList {
     public:
@@ -17,7 +21,9 @@ namespace grok {
             while (!m_list.empty())
             {
                 auto* t = m_list.back();
-                delete t;
+                if(t) {
+                    delete t;
+                }
                 m_list.pop_back();
             }
         }

@@ -6,6 +6,10 @@ enum RegistorResultType {
     eRegister_ParamErr = 1;
 }
 
+message ReqNodeRegistor {
+
+}
+
 message RspNodeRegistor {
     RegistorResultType status = 1;
 }
@@ -20,7 +24,7 @@ enum MsgType {
 message MsgPack {
     string source = 1;
     string dest = 2;
-    int32 msgid = 3;
+    string msgname = 3;
     MsgType msgtype = 4;
     int32 sessionid = 5;
     bytes pbdata = 6;

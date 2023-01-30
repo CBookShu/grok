@@ -34,9 +34,19 @@ struct MsgPackHelper {
     }
 };
 
-grok::NodeCenter::SPtr grok::NodeCenter::Create(boost::asio::io_service& iov, boost::asio::ip::tcp::endpoint ep)
+struct MsgPackOperatorRun : GrokRunable {
+    Session::Ptr client;
+    MsgCenter::MsgOpCall cb;
+    MsgPackSPtr pack;
+
+    virtual void run() override {
+        cb(client, pack);
+    }
+};
+
+grok::NodeCenter::SPtr grok::NodeCenter::Create(boost::asio::io_service& iov, int port)
 {
-    auto t = std::thread::hardware_concurrency() * 2 + 1;
+    auto t = std::thread::hardware_concurrency() + 1;
 
     auto sptr = std::make_shared<NodeCenter>();
     sptr->m_net_server = std::make_shared<NetServer>(iov);
@@ -45,8 +55,13 @@ grok::NodeCenter::SPtr grok::NodeCenter::Create(boost::asio::io_service& iov, bo
     sptr->m_net_server->evMsg += delegate(sptr, &NodeCenter::on_puremsg);
 
 
-    sptr->m_net_server->start(ep, t);
+    sptr->m_net_server->start(port, t);
     return sptr;
+}
+
+void grok::NodeCenter::regsiter_msgcenter(MsgCenterSPtr msgcenter)
+{
+    imMsgOperator = make_function_wrapper(msgcenter, &MsgCenter::msg_operator);
 }
 
 void grok::NodeCenter::on_newsession(Session::Ptr s)
@@ -87,25 +102,22 @@ void grok::NodeCenter::on_closesession(Session::Ptr s, boost::system::error_code
 
 void grok::NodeCenter::on_puremsg(Session::Ptr s, const char *d, std::size_t n)
 {
-    std::unique_ptr<nodeService::MsgPack> pack = std::make_unique<nodeService::MsgPack>();
+    auto pack = std::make_shared<nodeService::MsgPack>();
     if(!pack->ParseFromArray(d, n)) {
         // 格式不对
         return ;
     }
-    if(pack->msgid() <= 0) {
-        return ;
-    }
 
-    if(pack->msgid() == NODE_SERVICE_REGISTER) {
-        on_registernode(pack.get(), s);
+    if(pack->msgname() == nodeService::ReqNodeRegistor::descriptor()->full_name()) {
+        on_registernode(pack, s);
         return;
     }
 
-    on_nodemsg(pack.get(), s);
+    on_nodemsg(pack, s);
     return;
 }
 
-void grok::NodeCenter::on_registernode(nodeService::MsgPack *p, Session::Ptr s)
+void grok::NodeCenter::on_registernode(MsgPackSPtr p, Session::Ptr s)
 {
     nodeService::RspNodeRegistor rsp;
     rsp.set_status(nodeService::eRegister_OK);
@@ -113,7 +125,7 @@ void grok::NodeCenter::on_registernode(nodeService::MsgPack *p, Session::Ptr s)
         // 参数错误
         rsp.set_status(nodeService::eRegister_ParamErr);
         p->set_msgtype(nodeService::eMsg_response);
-        MsgPackHelper::Send(s, p, rsp);
+        MsgPackHelper::Send(s, p.get(), rsp);
         return;
     }
 
@@ -121,7 +133,7 @@ void grok::NodeCenter::on_registernode(nodeService::MsgPack *p, Session::Ptr s)
         // 参数错误
         rsp.set_status(nodeService::eRegister_ParamErr);
         p->set_msgtype(nodeService::eMsg_response);
-        MsgPackHelper::Send(s, p, rsp);
+        MsgPackHelper::Send(s, p.get(), rsp);
         return;
     }
 
@@ -152,10 +164,10 @@ void grok::NodeCenter::on_registernode(nodeService::MsgPack *p, Session::Ptr s)
     }
 
     // 这里，还需要对注册的client进行返回成功的消息
-    MsgPackHelper::Send(s, p, rsp);
+    MsgPackHelper::Send(s, p.get(), rsp);
 }
 
-void grok::NodeCenter::on_nodemsg(nodeService::MsgPack *p, Session::Ptr s)
+void grok::NodeCenter::on_nodemsg(MsgPackSPtr p, Session::Ptr s)
 {
     if(p->msgtype() == nodeService::eMsg_response) {
         // 找到
@@ -164,7 +176,19 @@ void grok::NodeCenter::on_nodemsg(nodeService::MsgPack *p, Session::Ptr s)
             // response的节点已经挂了
             return;
         }
-        MsgPackHelper::Send(source_s, p);
+        MsgPackHelper::Send(source_s, p.get());
+        return;
+    }
+
+    if(p->dest() == gNodeCenterName) {
+        auto source_s = get_session(p->source());
+        if(!source_s) {
+            return;
+        }
+        // 分发处理
+        if(imMsgOperator) {
+            imMsgOperator(source_s, p);
+        }
         return;
     }
 
@@ -173,7 +197,7 @@ void grok::NodeCenter::on_nodemsg(nodeService::MsgPack *p, Session::Ptr s)
     if(!dest_s) {
         return;
     }
-    MsgPackHelper::Send(dest_s, p);
+    MsgPackHelper::Send(dest_s, p.get());
 }
 
 Session::Ptr grok::NodeCenter::get_session(const std::string& name)
@@ -186,10 +210,10 @@ Session::Ptr grok::NodeCenter::get_session(const std::string& name)
     return nullptr;
 }
 
-grok::NodeClient::SPtr grok::NodeClient::Create(boost::asio::io_service &iosvr, boost::asio::ip::tcp::endpoint ep, std::string name)
+grok::NodeClient::SPtr grok::NodeClient::Create(boost::asio::io_service &iosvr, const char *ip, int port, std::string name)
 {
     SPtr r = std::make_shared<NodeClient>();
-    r->m_ctx.s = Session::Connect(iosvr, ep);
+    r->m_ctx.s = Session::Connect(iosvr, ip, port);
     if(!r->m_ctx.s) {
         return nullptr;
     }
@@ -198,17 +222,16 @@ grok::NodeClient::SPtr grok::NodeClient::Create(boost::asio::io_service &iosvr, 
     r->m_ctx.s->start();
     // 发送注册
     nodeService::MsgPack pack;
-    pack.set_msgid(NODE_SERVICE_REGISTER);
+    pack.set_msgname(nodeService::ReqNodeRegistor::descriptor()->full_name());
     pack.set_source(name);
     pack.set_msgtype(nodeService::eMsg_request);
     MsgPackHelper::Send(r->m_ctx.s, &pack);
     return r;
 }
 
-void grok::NodeClient::register_msgid(std::int32_t msgid, MsgOpCall &&cb)
+void grok::NodeClient::regsiter_msgcenter(MsgCenterSPtr msgcenter)
 {
-    auto w = m_data.writeGuard();
-    w->m_msg_opmap[msgid] = std::move(cb);
+    imMsgOperator = make_function_wrapper(msgcenter, &MsgCenter::msg_operator);
 }
 
 Session::Ptr grok::NodeClient::get_session()
@@ -216,12 +239,12 @@ Session::Ptr grok::NodeClient::get_session()
     return m_ctx.s;
 }
 
-void grok::NodeClient::send_notify(std::int32_t msgid, const std::string &dest, const char *data, std::size_t n)
+void grok::NodeClient::send_notify(std::string msgname, const std::string &dest, const char *data, std::size_t n)
 {
     std::shared_ptr<nodeService::MsgPack> p = std::make_shared<nodeService::MsgPack>();
     p->set_dest(dest);
     p->mutable_pbdata()->append(data, n);
-    p->set_msgid(msgid);
+    p->set_msgname(msgname);
     p->set_msgtype(nodeService::eMsg_notify);
     //TODO: 当lambda支持move uniqeptr时可以修改,可以把shared_ptr改成uniqe_ptr
 
@@ -232,12 +255,12 @@ void grok::NodeClient::send_notify(std::int32_t msgid, const std::string &dest, 
     });
 }
 
-void grok::NodeClient::send_request(std::int32_t msgid, const std::string &dest, const char *data, std::size_t n)
+void grok::NodeClient::send_request(std::string msgname, const std::string &dest, const char *data, std::size_t n)
 {
     std::shared_ptr<nodeService::MsgPack> p = std::make_shared<nodeService::MsgPack>();
     p->set_dest(dest);
     p->mutable_pbdata()->append(data, n);
-    p->set_msgid(msgid);
+    p->set_msgname(msgname);
     p->set_msgtype(nodeService::eMsg_request);
     p->set_sessionid(msg_msgnextidx());
     //TODO: 当lambda支持move uniqeptr时可以修改,可以把shared_ptr改成uniqe_ptr
@@ -252,7 +275,7 @@ void grok::NodeClient::send_request(std::int32_t msgid, const std::string &dest,
 void grok::NodeClient::send_response(nodeService::MsgPack *p, const char *data, std::size_t n)
 {
     std::shared_ptr<nodeService::MsgPack> p_rsp = std::make_shared<nodeService::MsgPack>();
-    p_rsp->set_msgid(p->msgid());
+    p_rsp->set_msgname(p->msgname());
     p_rsp->set_dest(p->dest());
     p_rsp->set_source(p->source());
     p_rsp->set_msgtype(nodeService::eMsg_response);
@@ -269,27 +292,96 @@ void grok::NodeClient::send_response(nodeService::MsgPack *p, const char *data, 
 void grok::NodeClient::on_puremsg(Session::Ptr s, const char *d, std::size_t n)
 {
     // 处理该函数的线程，一定是session->sock->io_service->run的thread
-    std::unique_ptr<nodeService::MsgPack> pack = std::make_unique<nodeService::MsgPack>();
+    auto pack = std::make_shared<nodeService::MsgPack>();
     if(!pack->ParseFromArray(d, n)) {
         // 格式不对
         return ;
     }
 
-    MsgOpCall cb;
-    {
-        auto r = m_data.readGuard();
-        auto it = r->m_msg_opmap.find(pack->msgid());
-        if(it != r->m_msg_opmap.end()) {
-            cb = it->second;
-        }
-    }
-    if (cb) {
-        auto self = shared_from_this();
-        cb(self, pack.get());
+    // TODO: 消息分发
+    if(imMsgOperator) {
+        imMsgOperator(m_ctx.s, pack);
     }
 }
 
 std::uint32_t grok::NodeClient::msg_msgnextidx()
 {
     return m_req_sessionidx.fetch_add(1);
+}
+
+MsgCenterSPtr grok::MsgCenter::Create()
+{
+    auto sptr = std::make_shared<MsgCenter>();
+    auto thread = std::thread::hardware_concurrency() * 2;
+    sptr->start(thread);
+    return sptr;
+}
+
+grok::MsgCenter::~MsgCenter()
+{
+    stop();
+}
+
+void grok::MsgCenter::start(int num)
+{
+    m_op_threads.resize(num);
+    for (int i = 0; i < num; ++i) {
+        m_op_threads[i] = std::thread([this](){
+            thread_func();
+        });
+    }
+}
+
+void grok::MsgCenter::stop()
+{
+    for (int i = 0; i < m_op_threads.size(); ++i) {
+        m_op_lists.Give(nullptr);
+    }
+
+    for (int i = 0; i < m_op_threads.size(); ++i) {
+        m_op_threads[i].join();
+    }
+}
+
+void grok::MsgCenter::post(GrokRunable *run)
+{
+    m_op_lists.Give(run);
+}
+
+void grok::MsgCenter::register_msg(std::string msgname, MsgOpCall &&cb)
+{
+    auto w = m_data.writeGuard();
+    w->msg2calls[msgname] = std::move(cb);
+}
+
+void grok::MsgCenter::msg_operator(Session::Ptr s, MsgPackSPtr p)
+{
+    MsgOpCall cb;
+    {
+        auto r = m_data.readGuard();
+        auto it = r->msg2calls.find(p->msgname());
+        if (it != r->msg2calls.end()) {
+            cb = it->second;
+        }
+    }
+    if(cb) {
+        auto* run = new MsgPackOperatorRun;
+        run->cb = cb;
+        run->client = s;
+        run->pack = p;
+        m_op_lists.Give(run);
+    }
+}
+
+void grok::MsgCenter::thread_func()
+{
+    for(;;) {
+        auto *p = m_op_lists.Get();
+        if(!p) {
+            // 收到空说明要结束了
+            break;
+        }
+        p->run();
+        delete p;
+    }
 }

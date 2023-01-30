@@ -4,6 +4,7 @@
 #include <boost/asio.hpp>
 #include <thread>
 #include <vector>
+#include <random>
 
 
 #define ASSERT_SYSERROR(ec) if(ec) {DBG("SYSERROR %s", ec.message().c_str());assert(false);}
@@ -26,12 +27,15 @@ grok::Session::~Session() {
     DBG("SESSIONCLOSE %s", to_string().c_str());
 }
 
-Session::Ptr grok::Session::Connect(boost::asio::io_service&iosvr,boost::asio::ip::tcp::endpoint ep,PacketProtocolBase::SPtr protocl)
+Session::Ptr grok::Session::Connect(boost::asio::io_service&iosvr, const char *ip, int port,PacketProtocolBase::SPtr protocl)
 {
     Session::Ptr session = std::make_shared<Session>(iosvr);
     session->m_packptr = protocl;
 
+
     boost::system::error_code ec;
+    auto addr = boost::asio::ip::address::from_string(ip);
+    boost::asio::ip::tcp::endpoint ep(addr, port);
     session->m_sock.connect(ep, ec);
     if(ec) {
         DBG("CONNECT %s", ec.message().c_str());
@@ -187,7 +191,7 @@ void grok::NetServer::set_packet_protocol(PacketProtocolBase::SPtr p)
     }
 }
 
-void grok::NetServer::start(boost::asio::ip::tcp::endpoint ep, int thread)
+void grok::NetServer::start(int port, int thread)
 {
     bool r = false;
     if (!m_running.compare_exchange_strong(r, true))
@@ -199,6 +203,7 @@ void grok::NetServer::start(boost::asio::ip::tcp::endpoint ep, int thread)
             m_packptr = std::make_shared<PacketProtocolBase>();
         }
         
+        boost::asio::ip::tcp::endpoint ep(asio::ip::tcp::v4(), port);
         m_accepter = tcp::acceptor(m_iosvr, ep);
 
         m_thread_pools.resize(thread);
@@ -232,12 +237,20 @@ void grok::NetServer::stop()
     m_running.exchange(false);
 }
 
+boost::asio::io_service &grok::NetServer::iosvr_rnd()
+{
+    std::default_random_engine e(std::random_device{}());  
+    std::uniform_int_distribution<int> u(0, m_iosvr_pools.size() - 1);
+    auto r = u(e);
+    return *m_iosvr_pools[r];
+}
+
 void grok::NetServer::do_accept()
 {
     auto self = shared_from_this();
     auto idx = next_ioidx();
-    auto iosvr = iosvr_byidx(idx);
-    auto session = std::make_shared<Session>(*iosvr);
+    auto& iosvr = iosvr_byidx(idx);
+    auto session = std::make_shared<Session>(iosvr);
     session->m_packptr = m_packptr;
     session->evClose += grok::delegate(self, &NetServer::on_closesession);   
     session->evMsg += grok::delegate(self, &NetServer::on_msg);

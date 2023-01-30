@@ -38,6 +38,7 @@ void protobuf_AssignDesc_nodeService_2eproto();
 void protobuf_ShutdownFile_nodeService_2eproto();
 
 class MsgPack;
+class ReqNodeRegistor;
 class RspNodeRegistor;
 
 enum RegistorResultType {
@@ -85,6 +86,81 @@ inline bool MsgType_Parse(
     MsgType_descriptor(), name, value);
 }
 // ===================================================================
+
+class ReqNodeRegistor : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:nodeService.ReqNodeRegistor) */ {
+ public:
+  ReqNodeRegistor();
+  virtual ~ReqNodeRegistor();
+
+  ReqNodeRegistor(const ReqNodeRegistor& from);
+
+  inline ReqNodeRegistor& operator=(const ReqNodeRegistor& from) {
+    CopyFrom(from);
+    return *this;
+  }
+
+  static const ::google::protobuf::Descriptor* descriptor();
+  static const ReqNodeRegistor& default_instance();
+
+  void Swap(ReqNodeRegistor* other);
+
+  // implements Message ----------------------------------------------
+
+  inline ReqNodeRegistor* New() const { return New(NULL); }
+
+  ReqNodeRegistor* New(::google::protobuf::Arena* arena) const;
+  void CopyFrom(const ::google::protobuf::Message& from);
+  void MergeFrom(const ::google::protobuf::Message& from);
+  void CopyFrom(const ReqNodeRegistor& from);
+  void MergeFrom(const ReqNodeRegistor& from);
+  void Clear();
+  bool IsInitialized() const;
+
+  int ByteSize() const;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input);
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const;
+  ::google::protobuf::uint8* InternalSerializeWithCachedSizesToArray(
+      bool deterministic, ::google::protobuf::uint8* output) const;
+  ::google::protobuf::uint8* SerializeWithCachedSizesToArray(::google::protobuf::uint8* output) const {
+    return InternalSerializeWithCachedSizesToArray(false, output);
+  }
+  int GetCachedSize() const { return _cached_size_; }
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(ReqNodeRegistor* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return _internal_metadata_.arena();
+  }
+  inline void* MaybeArenaPtr() const {
+    return _internal_metadata_.raw_arena_ptr();
+  }
+  public:
+
+  ::google::protobuf::Metadata GetMetadata() const;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // @@protoc_insertion_point(class_scope:nodeService.ReqNodeRegistor)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArena _internal_metadata_;
+  bool _is_default_instance_;
+  mutable int _cached_size_;
+  friend void  protobuf_AddDesc_nodeService_2eproto();
+  friend void protobuf_AssignDesc_nodeService_2eproto();
+  friend void protobuf_ShutdownFile_nodeService_2eproto();
+
+  void InitAsDefaultInstance();
+  static ReqNodeRegistor* default_instance_;
+};
+// -------------------------------------------------------------------
 
 class RspNodeRegistor : public ::google::protobuf::Message /* @@protoc_insertion_point(class_definition:nodeService.RspNodeRegistor) */ {
  public:
@@ -250,11 +326,16 @@ class MsgPack : public ::google::protobuf::Message /* @@protoc_insertion_point(c
   ::std::string* release_dest();
   void set_allocated_dest(::std::string* dest);
 
-  // optional int32 msgid = 3;
-  void clear_msgid();
-  static const int kMsgidFieldNumber = 3;
-  ::google::protobuf::int32 msgid() const;
-  void set_msgid(::google::protobuf::int32 value);
+  // optional string msgname = 3;
+  void clear_msgname();
+  static const int kMsgnameFieldNumber = 3;
+  const ::std::string& msgname() const;
+  void set_msgname(const ::std::string& value);
+  void set_msgname(const char* value);
+  void set_msgname(const char* value, size_t size);
+  ::std::string* mutable_msgname();
+  ::std::string* release_msgname();
+  void set_allocated_msgname(::std::string* msgname);
 
   // optional .nodeService.MsgType msgtype = 4;
   void clear_msgtype();
@@ -286,10 +367,10 @@ class MsgPack : public ::google::protobuf::Message /* @@protoc_insertion_point(c
   bool _is_default_instance_;
   ::google::protobuf::internal::ArenaStringPtr source_;
   ::google::protobuf::internal::ArenaStringPtr dest_;
-  ::google::protobuf::int32 msgid_;
+  ::google::protobuf::internal::ArenaStringPtr msgname_;
   int msgtype_;
-  ::google::protobuf::internal::ArenaStringPtr pbdata_;
   ::google::protobuf::int32 sessionid_;
+  ::google::protobuf::internal::ArenaStringPtr pbdata_;
   mutable int _cached_size_;
   friend void  protobuf_AddDesc_nodeService_2eproto();
   friend void protobuf_AssignDesc_nodeService_2eproto();
@@ -304,6 +385,10 @@ class MsgPack : public ::google::protobuf::Message /* @@protoc_insertion_point(c
 // ===================================================================
 
 #if !PROTOBUF_INLINE_NOT_IN_HEADERS
+// ReqNodeRegistor
+
+// -------------------------------------------------------------------
+
 // RspNodeRegistor
 
 // optional .nodeService.RegistorResultType status = 1;
@@ -412,18 +497,48 @@ inline void MsgPack::set_allocated_dest(::std::string* dest) {
   // @@protoc_insertion_point(field_set_allocated:nodeService.MsgPack.dest)
 }
 
-// optional int32 msgid = 3;
-inline void MsgPack::clear_msgid() {
-  msgid_ = 0;
+// optional string msgname = 3;
+inline void MsgPack::clear_msgname() {
+  msgname_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline ::google::protobuf::int32 MsgPack::msgid() const {
-  // @@protoc_insertion_point(field_get:nodeService.MsgPack.msgid)
-  return msgid_;
+inline const ::std::string& MsgPack::msgname() const {
+  // @@protoc_insertion_point(field_get:nodeService.MsgPack.msgname)
+  return msgname_.GetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
-inline void MsgPack::set_msgid(::google::protobuf::int32 value) {
+inline void MsgPack::set_msgname(const ::std::string& value) {
   
-  msgid_ = value;
-  // @@protoc_insertion_point(field_set:nodeService.MsgPack.msgid)
+  msgname_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:nodeService.MsgPack.msgname)
+}
+inline void MsgPack::set_msgname(const char* value) {
+  
+  msgname_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:nodeService.MsgPack.msgname)
+}
+inline void MsgPack::set_msgname(const char* value, size_t size) {
+  
+  msgname_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:nodeService.MsgPack.msgname)
+}
+inline ::std::string* MsgPack::mutable_msgname() {
+  
+  // @@protoc_insertion_point(field_mutable:nodeService.MsgPack.msgname)
+  return msgname_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MsgPack::release_msgname() {
+  // @@protoc_insertion_point(field_release:nodeService.MsgPack.msgname)
+  
+  return msgname_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MsgPack::set_allocated_msgname(::std::string* msgname) {
+  if (msgname != NULL) {
+    
+  } else {
+    
+  }
+  msgname_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), msgname);
+  // @@protoc_insertion_point(field_set_allocated:nodeService.MsgPack.msgname)
 }
 
 // optional .nodeService.MsgType msgtype = 4;
@@ -499,6 +614,8 @@ inline void MsgPack::set_allocated_pbdata(::std::string* pbdata) {
 }
 
 #endif  // !PROTOBUF_INLINE_NOT_IN_HEADERS
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 
