@@ -8,3 +8,4 @@
 #include "redisConnector.h"
 #include "mysqlConnector.h"
 #include "grokSimpleNet.h"
+#include "grwtype.h"

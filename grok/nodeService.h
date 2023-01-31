@@ -5,7 +5,7 @@
 
 #include "boost/noncopyable.hpp"
 #include "grokSimpleNet.h"
-#include "utils.h"
+#include "grwtype.h"
 #include "pb/nodeService.pb.h"
 #include "locklist.h"
 
