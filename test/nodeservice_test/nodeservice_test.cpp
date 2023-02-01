@@ -20,10 +20,10 @@ public:
         AUTO_REGISTER_PBMSG_2(msgcenter, nodemsg_test::TestReq1, nodemsg_test::TestRsp1, on_client2);
     }
     
-    void on_client1(nodemsg_test::TestRsp1* rsp) {
+    void on_client1(MsgPackSPtr p, nodemsg_test::TestRsp1* rsp) {
         rsp->PrintDebugString();
     }
-    void on_client2(nodemsg_test::TestReq1* req,nodemsg_test::TestRsp1* rsp) {
+    void on_client2(MsgPackSPtr p, nodemsg_test::TestReq1* req,nodemsg_test::TestRsp1* rsp) {
         req->PrintDebugString();
         rsp->set_rsp("world");
     }

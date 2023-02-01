@@ -133,14 +133,17 @@ namespace grok
         void register_msg(std::string msgname, MsgOpCall&& cb);
 
         template <typename PbRep, typename PbRsp, typename F>
+        // F 充当函数角色
+        // f type -> void (MsgPackSPtr p, PbReq* req, PbRsp* rsp);
+        // 并且会自动回复rsp
         void regsiter_reqrsp(F &&f) {
             auto msgname = PbRep::descriptor()->full_name();
-            std::function<void(PbRep*,PbRsp*)> cb(std::forward<F>(f));
+            std::function<void(MsgPackSPtr,PbRep*,PbRsp*)> cb(std::forward<F>(f));
             register_msg(msgname, [cb](Session::Ptr c, MsgPackSPtr p){
                 PbRep req;
                 if(req.ParseFromString(p->pbdata())) {
                     PbRsp rsp;
-                    cb(&req, &rsp);
+                    cb(p, &req, &rsp);
                     if(p->msgtype() == nodeService::eMsg_request) {
                         p->set_msgtype(nodeService::eMsg_response);
                         p->set_msgname(PbRsp::descriptor()->full_name());
@@ -156,13 +159,15 @@ namespace grok
         }
         
         template <typename PbReq, typename F>
+        // F 充当函数角色
+        // f type -> void (MsgPackSPtr p, PbReq* req);
         void regster_rspnotify(F &&f) {
             auto msgname = PbReq::descriptor()->full_name();
-            std::function<void(PbReq*)> cb(std::forward<F>(f));
+            std::function<void(MsgPackSPtr,PbReq*)> cb(std::forward<F>(f));
             register_msg(msgname, [cb](Session::Ptr c, MsgPackSPtr p){
                 PbReq req;
                 if(req.ParseFromString(p->pbdata())) {
-                    cb(&req);
+                    cb(p, &req);
                 }
             });
         }
@@ -184,8 +189,8 @@ namespace grok
     };
 
     #define AUTO_REGISTER_PBMSG_1(msgcenter,pbtype,func) \
-            msgcenter->regster_rspnotify<pbtype>([this](pbtype*pb){func(pb);});
+            msgcenter->regster_rspnotify<pbtype>([this](MsgPackSPtr p,pbtype*pb){func(p,pb);});
     #define AUTO_REGISTER_PBMSG_2(msgcenter,pbreq,pbrsp,func) \
-        msgcenter->regsiter_reqrsp<pbreq,pbrsp>([this](pbreq*req,pbrsp*rsp){func(req,rsp);});
+        msgcenter->regsiter_reqrsp<pbreq,pbrsp>([this](MsgPackSPtr p,pbreq*req,pbrsp*rsp){func(p,req,rsp);});
 
 } // namespace grok
