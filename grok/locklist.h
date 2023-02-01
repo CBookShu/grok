@@ -10,7 +10,16 @@ namespace grok {
         virtual void run() = 0;
     };
 
-    template <typename T>
+    struct DefaultDeleter {
+        template <typename T>
+        static void del(T* t) {
+            if (t) {
+                delete t;
+            }
+        }
+    };
+
+    template <typename T, typename D = DefaultDeleter>
     class LockList {
     public:
         LockList() = default;
@@ -21,9 +30,7 @@ namespace grok {
             while (!m_list.empty())
             {
                 auto* t = m_list.back();
-                if(t) {
-                    delete t;
-                }
+                D::del(t);
                 m_list.pop_back();
             }
         }
