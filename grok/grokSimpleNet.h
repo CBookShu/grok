@@ -1,11 +1,13 @@
 #pragma once
 #include <memory>
-#include "grok.h"
 #include <atomic>
 #include <boost/noncopyable.hpp>
 #include <boost/asio.hpp>
 #include <thread>
 #include <vector>
+
+#include "event.h"
+#include "groklog.h"
 
 namespace grok {
     /*
