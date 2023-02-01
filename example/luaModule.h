@@ -57,9 +57,36 @@ struct LuaModel : public std::enable_shared_from_this<LuaModel> {
     std::unordered_map<std::string,grok::stdtimerPtr> file_listener;
 };
 
-class LuaModelManager {
-public:
+struct LuaStateDeleter {
+    static void del(lua_State* t) {
+        if (t) {
+            lua_close(t);
+        }
+    }
+};
 
-private:
-    boost::asio::io_service m_iosvr;
+struct LuaModelManager {
+    struct Data {
+        std::unordered_map<std::string, LuaModel::SPtr> name2model;
+    };
+    using LuaStateUPtr = std::unique_ptr<lua_State, LuaStateDeleter>;
+
+    // 主线程的消息循环
+    boost::asio::io_service ios;
+    // node的消息注册、处理线程池
+    grok::MsgCenterSPtr msgcenter;
+    // 线程池中执行的lua_State
+    grok::LockList<lua_State, LuaStateDeleter> msgop_luastate;
+    // lua模块
+    grok::grwtype<Data> models;
+    // 多线程竞争的联合锁
+    grok::UnionLockLocal<std::string> unionlock;
+    // mysql pool
+    grok::mysql::MysqlPool mysqlpool;
+    // redids pool
+    grok::redis::RedisConPool redispool;
+
+
+    void init();
+    void uninit();
 };
