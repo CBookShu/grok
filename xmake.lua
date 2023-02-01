@@ -9,7 +9,7 @@ target("grok")
 -- lua 5.3.5
 target("lua")
     set_kind("static")
-    
+    add_files("deps/lua/*.c|deps/lua/lua.c")
 
 target("pbc")
     set_kind("static")
@@ -20,10 +20,13 @@ target("example")
     set_kind("binary")
     -- grok
     add_deps("grok")
+    -- lua
+    add_deps("lua")
+    add_includedirs("$(projectdir)/deps/lua/")
     -- pbc
     add_deps("pbc")
     add_includedirs("$(projectdir)/deps/pbc/")
-    add_files("$(projectdir)/deps/pbc/binding/")
+    add_files("$(projectdir)/deps/pbc/binding/lua53/pbc-lua53.c")
     -- example
     add_includedirs("$(projectdir)")
     add_files("example/*.cpp")
