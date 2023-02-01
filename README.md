@@ -45,9 +45,3 @@
     cd grok  
     xmake
     xmake run 
-
-## TODO:
-    1. redis异步同步mysql功能
-    2. 联锁
-    3. lua绑定
-    4. 业务示例
