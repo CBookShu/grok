@@ -14,10 +14,10 @@ using namespace grok;
 class TestPb {
 public:
     void regster_client1(MsgCenterSPtr msgcenter) {
-        AUTO_REGISTER_PBMSG_2(msgcenter, nodemsg_test::TestRsp1, on_client1);
+        AUTO_REGISTER_PBMSG_1(msgcenter, nodemsg_test::TestRsp1, on_client1);
     }
     void regster_client2(MsgCenterSPtr msgcenter) {
-        AUTO_REGISTER_PBMSG_1(msgcenter, nodemsg_test::TestReq1, nodemsg_test::TestRsp1, on_client2);
+        AUTO_REGISTER_PBMSG_2(msgcenter, nodemsg_test::TestReq1, nodemsg_test::TestRsp1, on_client2);
     }
     
     void on_client1(nodemsg_test::TestRsp1* rsp) {
@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
         w.async_wait([client](boost::system::error_code ec){
             nodemsg_test::TestReq1 req;
             req.set_req("hello");
-            client->send_request_pb<nodemsg_test::TestReq1>("test2", &req);
+            client->send_request_pb("test2", &req);
         });
         iov.run();
         return ;

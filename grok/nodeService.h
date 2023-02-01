@@ -183,8 +183,9 @@ namespace grok
         std::vector<std::thread> m_op_threads;
     };
 
-    #define AUTO_REGISTER_PBMSG_1(msgcenter,pbreq,pbrsp,func) \
+    #define AUTO_REGISTER_PBMSG_1(msgcenter,pbtype,func) \
+            msgcenter->regster_rspnotify<pbtype>([this](pbtype*pb){func(pb);});
+    #define AUTO_REGISTER_PBMSG_2(msgcenter,pbreq,pbrsp,func) \
         msgcenter->regsiter_reqrsp<pbreq,pbrsp>([this](pbreq*req,pbrsp*rsp){func(req,rsp);});
-    #define AUTO_REGISTER_PBMSG_2(msgcenter,pbtype,func) \
-        msgcenter->regster_rspnotify<pbtype>([this](pbtype*pb){func(pb);});
+
 } // namespace grok
