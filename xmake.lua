@@ -6,9 +6,25 @@ target("grok")
     add_files("grok/pb/*.cc")
     add_links("hiredis","protobuf","boost_system", "pthread", "boost_filesystem", "mysqlclient", "boost_thread")
 
+-- lua 5.3.5
+target("lua")
+    set_kind("static")
+    
+
+target("pbc")
+    set_kind("static")
+    add_includedirs("$(projectdir)/deps/pbc/")
+    add_files("deps/pbc/src/*.c")
+
 target("example")
     set_kind("binary")
+    -- grok
     add_deps("grok")
+    -- pbc
+    add_deps("pbc")
+    add_includedirs("$(projectdir)/deps/pbc/")
+    add_files("$(projectdir)/deps/pbc/binding/")
+    -- example
     add_includedirs("$(projectdir)")
     add_files("example/*.cpp")
 
