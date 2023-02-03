@@ -27,11 +27,9 @@ namespace grok
     class NodeCenter : boost::noncopyable, public std::enable_shared_from_this<NodeCenter> {
     public:
         using SPtr = std::shared_ptr<NodeCenter>;
-        ImportFunctional<void(Session::Ptr c, MsgPackSPtr p)> imMsgOperator;
+        EventNoMutex<Session::Ptr, MsgPackSPtr> evMsgCome;
 
         static SPtr Create(boost::asio::io_service& iov, int port);
-
-        void regsiter_msgcenter(MsgCenterSPtr msgcenter);
 
         NetServer::SPtr get_server() {
             return m_net_server;
@@ -60,12 +58,10 @@ namespace grok
     class NodeClient : boost::noncopyable, public std::enable_shared_from_this<NodeClient> {
     public:
         using SPtr = std::shared_ptr<NodeClient>;
-        ImportFunctional<void(Session::Ptr c, MsgPackSPtr p)> imMsgOperator;
+        EventNoMutex<Session::Ptr, MsgPackSPtr> evMsgCome;
 
         NodeClient() = default;
         static SPtr Create(boost::asio::io_service&iosvr, const char* ip, int port, std::string name);
-
-        void regsiter_msgcenter(MsgCenterSPtr msgcenter);
 
         template<typename F>
         void dispatch(F&& f) {

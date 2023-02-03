@@ -36,14 +36,14 @@ int main(int argc, char** argv) {
     const char* ip = "127.0.0.1";
     int port = 9595;
     auto center = grok::NodeCenter::Create(iov, port);
-    center->regsiter_msgcenter(msgcenter);
+    center->evMsgCome += delegate(msgcenter, &MsgCenter::msg_operator);
 
     TestPb test;
 
     std::thread t1([&](){
         asio::io_service iov;
         auto client = grok::NodeClient::Create(iov, ip, port, "test1");
-        client->regsiter_msgcenter(msgcenter);
+        client->evMsgCome += delegate(msgcenter, &MsgCenter::msg_operator);
         test.regster_client1(msgcenter);
         asio::basic_waitable_timer<std::chrono::steady_clock> w(iov);
         w.expires_from_now(std::chrono::seconds(2));
@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
     std::thread t2([&](){
         asio::io_service iov;
         auto client = grok::NodeClient::Create(iov, ip, port, "test2");
-        client->regsiter_msgcenter(msgcenter);
+        client->evMsgCome += delegate(msgcenter, &MsgCenter::msg_operator);
         test.regster_client2(msgcenter);
         iov.run();
         return ;

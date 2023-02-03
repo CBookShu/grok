@@ -59,11 +59,6 @@ grok::NodeCenter::SPtr grok::NodeCenter::Create(boost::asio::io_service& iov, in
     return sptr;
 }
 
-void grok::NodeCenter::regsiter_msgcenter(MsgCenterSPtr msgcenter)
-{
-    imMsgOperator = make_function_wrapper(msgcenter, &MsgCenter::msg_operator);
-}
-
 void grok::NodeCenter::on_newsession(Session::Ptr s)
 {
     // 新连接
@@ -186,9 +181,7 @@ void grok::NodeCenter::on_nodemsg(MsgPackSPtr p, Session::Ptr s)
             return;
         }
         // 分发处理
-        if(imMsgOperator) {
-            imMsgOperator(source_s, p);
-        }
+        evMsgCome(source_s, p);
         return;
     }
 
@@ -227,11 +220,6 @@ grok::NodeClient::SPtr grok::NodeClient::Create(boost::asio::io_service &iosvr, 
     pack.set_msgtype(nodeService::eMsg_request);
     MsgPackHelper::Send(r->m_ctx.s, &pack);
     return r;
-}
-
-void grok::NodeClient::regsiter_msgcenter(MsgCenterSPtr msgcenter)
-{
-    imMsgOperator = make_function_wrapper(msgcenter, &MsgCenter::msg_operator);
 }
 
 Session::Ptr grok::NodeClient::get_session()
@@ -298,10 +286,7 @@ void grok::NodeClient::on_puremsg(Session::Ptr s, const char *d, std::size_t n)
         return ;
     }
 
-    // TODO: 消息分发
-    if(imMsgOperator) {
-        imMsgOperator(m_ctx.s, pack);
-    }
+    evMsgCome(m_ctx.s, pack);
 }
 
 std::uint32_t grok::NodeClient::msg_msgnextidx()
