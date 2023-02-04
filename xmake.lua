@@ -2,18 +2,26 @@ add_rules("mode.debug", "mode.release")
 
 target("grok")
     set_kind("static")
+    add_includedirs("$(projectdir)", {public = true})
     add_files("grok/*.cpp")
     add_files("grok/pb/*.cc")
-    add_links("hiredis","protobuf","boost_system", "pthread", "boost_filesystem", "mysqlclient", "boost_thread")
+    -- 第三方库
+    add_links("hiredis","protobuf","mysqlclient")
+    -- boost库
+    add_links("boost_system", "boost_filesystem", "boost_thread")
+    -- 系统库
+    add_syslinks("pthread")
 
 -- lua 5.3.5
 target("lua")
     set_kind("static")
+    -- 增加public=true，后面add_deps的项目，会继承该include
+    add_includedirs("$(projectdir)/deps/lua/", {public = true})
     add_files("deps/lua/*.c|deps/lua/lua.c")
 
 target("pbc")
     set_kind("static")
-    add_includedirs("$(projectdir)/deps/pbc/")
+    add_includedirs("$(projectdir)/deps/pbc/", {public = true})
     add_files("deps/pbc/src/*.c")
 
 target("example")
@@ -22,13 +30,10 @@ target("example")
     add_deps("grok")
     -- lua
     add_deps("lua")
-    add_includedirs("$(projectdir)/deps/lua/")
     -- pbc
     add_deps("pbc")
-    add_includedirs("$(projectdir)/deps/pbc/")
     add_files("$(projectdir)/deps/pbc/binding/lua53/pbc-lua53.c")
     -- example
-    add_includedirs("$(projectdir)")
     add_files("example/*.cpp")
 
 target("bench_im")
@@ -44,13 +49,11 @@ target("hiredis_test")
 target("locklist_test")
     set_kind("binary")
     add_deps("grok")
-    add_includedirs("$(projectdir)")
     add_files("test/locklist_test/*.cpp")
 
 target("unionlock_test")
     set_kind("binary")
     add_deps("grok")
-    add_includedirs("$(projectdir)")
     add_files("test/unionlock_test/*.cpp")
 
 -- target("hiredis")
@@ -59,32 +62,27 @@ target("unionlock_test")
 
 target("redispool_test")
     set_kind("binary")
-    add_includedirs("$(projectdir)")
     add_deps("grok")
     add_files("test/redispool_test/*.cpp")
 
 
 target("libmysqlclient_test")
     set_kind("binary")
-    add_includedirs("$(projectdir)")
     add_files("test/libmysqlclient_test/*.cpp")
     add_links("mysqlclient")
 
 target("mysqlpool_test")
     set_kind("binary")
-    add_includedirs("$(projectdir)")
     add_deps("grok")
     add_files("test/mysqlpool_test/*.cpp")
 
 target("netserver_test")
     set_kind("binary")
-    add_includedirs("$(projectdir)")
     add_deps("grok")
     add_files("test/netserver_test/*.cpp")
 
 target("protobuf_test")
     set_kind("binary")
-    add_includedirs("$(projectdir)")
     add_links("protobuf")
     add_files("test/protobuf_test/*.cpp")
     add_files("test/protobuf_test/*.cc")
@@ -92,10 +90,15 @@ target("protobuf_test")
 
 target("nodeservice_test")
     set_kind("binary")
-    add_includedirs("$(projectdir)")
     add_deps("grok")
     add_files("test/nodeservice_test/*.cpp")
     add_files("test/nodeservice_test/*.cc")
+
+
+target("luabind_test")
+    set_kind("binary")
+    add_deps("lua")
+    add_files("test/luabind_test/*.cpp")
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
