@@ -1,7 +1,6 @@
 #include <iostream>
 #include <cassert>
 #include "proto_test.pb.h"
-#include "grok/pb/nodeService.pb.h"
 
 using namespace std;
 
