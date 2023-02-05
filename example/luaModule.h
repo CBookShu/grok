@@ -2,17 +2,18 @@
 #include <memory>
 #include <map>
 #include <unordered_map>
-extern "C" {
-#include "lua.h"
-#include "lauxlib.h"
-#include "lualib.h"
-}
-#include <lauxlib.h>
+
 #include <boost/any.hpp>
 #include <boost/variant.hpp>
 
 #include "grok/grok.h"
 #include "utils.h"
+
+extern "C" {
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+}
 
 // 简单映射lua table的类
 // 用于保存一些可以在多个 lua_State 共同使用的缓存
@@ -55,6 +56,8 @@ struct LuaModel : public std::enable_shared_from_this<LuaModel> {
     grok::WorkStaff staff;
     // 文件监听
     std::unordered_map<std::string,grok::stdtimerPtr> file_listener;
+
+    void stop();
 };
 
 struct LuaStateDeleter {
@@ -69,24 +72,45 @@ struct LuaModelManager {
     struct Data {
         std::unordered_map<std::string, LuaModel::SPtr> name2model;
     };
-    using LuaStateUPtr = std::unique_ptr<lua_State, LuaStateDeleter>;
+
+    ImportFunctional<std::string()> imGetDir;
 
     // 主线程的消息循环
     boost::asio::io_service ios;
     // node的消息注册、处理线程池
     grok::MsgCenterSPtr msgcenter;
-    // 线程池中执行的lua_State
-    grok::LockList<lua_State, LuaStateDeleter> msgop_luastate;
-    // lua模块
-    grok::grwtype<Data> models;
+    // lua模块脚本
+    grok::grwtype<Data> lua_models;
+    // 消息分发lua脚本
+    grok::LockList<lua_State, LuaStateDeleter> lua_scripts;
     // 多线程竞争的联合锁
     grok::UnionLockLocal<std::string> unionlock;
     // mysql pool
-    grok::mysql::MysqlPool mysqlpool;
+    grok::mysql::MysqlPool::SPtr mysqlpool;
     // redids pool
-    grok::redis::RedisConPool redispool;
+    grok::redis::RedisConPool::SPtr redispool;
 
 
+    static LuaModelManager* get_instance();
+    static void del_instance();
+    
     void init();
     void uninit();
+
+
+    void on_msg(grok::Session::Ptr s, grok::MsgPackSPtr p);
+
+    void new_luamodel(const char* name, LuaModel::SPtr m);
+    void replace_luamodel(const char* name, LuaModel::SPtr m_old, LuaModel::SPtr m_new);
+    LuaModel::SPtr del_luamodel(const char* name);
+    LuaModel::SPtr get_luamodel(const char* name);
 };
+
+
+extern "C" {
+// 绑定基础接口
+int luaopen_core(lua_State* L);
+
+// 绑定命令接口
+int luaopen_cmdcore(lua_State* L);
+}

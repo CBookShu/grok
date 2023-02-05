@@ -50,9 +50,8 @@ namespace grok::redis {
 
         int RedisCmdAppend(const char* fmt, ...);
         ReplyUPtr RedisReplay();
-
-    protected:
         redisContext* GetCtx();
+    protected:
         void SetBad() {m_bad = true;}
         bool CheckValid();
         bool Reconnect();
