@@ -405,7 +405,6 @@ grok::mysql::MysqlPool::SPtr grok::mysql::MysqlPool::Create(int size, MysqlConfi
         res->Give(new MysqlClient(config));
     }
     return res;
-
 }
 
 int grok::mysql::MysqlPool::Query(const char *sql)

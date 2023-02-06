@@ -10,18 +10,6 @@
 #include "groklog.h"
 
 namespace grok {
-    /*
-        简单的asio开发的服务器代码
-        main io_service 用来accept
-        thread per io_service 用来分配session读写
-
-        鉴于升级asio，在ubuntu18.04环境中需要自己去重新编译asio，这个提高了开箱的门槛，暂时不做
-        TODO: 升级asio:
-        1. bind_executor 这样就不需要在accept之前就要把线程池的iosvr拿到
-        2. accept 不需要提前维护一个临时的socket
-        3. 自带dynamic_string_buffer
-    */
-
     struct NetServer;
 
     // 一段连续的缓存  可用的buf + 空闲buf 组成

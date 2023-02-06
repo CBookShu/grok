@@ -66,14 +66,15 @@ struct LuaStateDeleter {
             lua_close(t);
         }
     }
+    void operator()(lua_State *l) const {
+        del(l);
+    }
 };
 
-struct LuaModelManager {
+struct LuaModelManager : public grok::WorkStaff {
     struct Data {
         std::unordered_map<std::string, LuaModel::SPtr> name2model;
     };
-
-    ImportFunctional<std::string()> imGetDir;
 
     // 主线程的消息循环
     boost::asio::io_service ios;
@@ -89,12 +90,14 @@ struct LuaModelManager {
     grok::mysql::MysqlPool::SPtr mysqlpool;
     // redids pool
     grok::redis::RedisConPool::SPtr redispool;
+    // 工作目录
+    std::string work_dir;
 
 
     static LuaModelManager* get_instance();
     static void del_instance();
     
-    void init();
+    void init(int argc, char** argv);
     void uninit();
 
 

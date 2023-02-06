@@ -1,12 +1,13 @@
 #include "luaModule.h"
+#include <boost/filesystem.hpp>
 
 static lua_State* create_lua_scripts(const char* path);
 static lua_State* create_lua_model(const char* path);
-static lua_State* create_lua_cmd(const char* path);
+static int create_lua_cmd(const char* path);
 
 static int l_core_curdir(lua_State *L) {
 	auto mgr = LuaModelManager::get_instance();
-	lua_pushstring(L, mgr->imGetDir().c_str());
+	// lua_pushstring(L, mgr->imGetDir().c_str());
 	return 1;
 }
 
@@ -39,21 +40,17 @@ static int l_core_get_cache(lua_State*L) {
 	const char* name = luaL_checkstring(L, 1);
 	auto m = mgr->get_luamodel(name);
 	if(!m) {
-		lua_pushboolean(L, 0);
+		lua_pushnil(L);
 		return 1;
 	}
-	{
-		auto w = m->cache.writeGuard();
-		if(top == 1) {
-			// get value
-			w->l_get_value(L);
-		} else if(top == 2) {
-			// get key value
-			w->l_get_value(L, 2);
-		}
+	auto r = m->cache.readGuard();
+	if(top == 1) {
+		// get value
+		return r->l_get_value(L);
+	} else if(top == 2) {
+		// get key value
+		return r->l_get_value(L, 2);
 	}
-	lua_pushboolean(L, 1);
-	return 1;
 }
 
 int luaopen_core(lua_State *L)
@@ -218,12 +215,23 @@ static lua_State* create_lua_model(const char* path) {
 	return L;
 }
 
-static lua_State* create_lua_cmd(const char* path) {
+static int create_lua_cmd(const char* path) {
 	auto* L = luaL_newstate();
+	std::unique_ptr<lua_State, LuaStateDeleter> guard(L);
+	
 	luaL_requiref(L, "core", luaopen_core, 0);
 	luaL_requiref(L, "cmdcore", luaopen_cmdcore, 0);
 
-	return L;
+	if(luaL_loadfile(L, path)) {
+		DBG("load file error:%s,%s", path, lua_tostring(L, -1));
+		return 0;
+	}
+
+	if(lua_pcall(L,0,0,0)) {
+		DBG("call file error:%s,%s", path, lua_tostring(L, -1));
+		return 0;
+	}
+	return 1;
 }
 
 using namespace grok;
@@ -461,10 +469,10 @@ void LuaTable::f_packval(lua_State *L, const Var *v)
 	}
 }
 
-static LuaModelManager* g_instance;
+static LuaModelManager* g_instance = nullptr;
 LuaModelManager *LuaModelManager::get_instance()
 {
-	if(g_instance != nullptr) {
+	if(!g_instance) {
 		g_instance = new LuaModelManager();
 	}
 	return g_instance;
@@ -477,9 +485,12 @@ void LuaModelManager::del_instance()
 	}
 }
 
-void LuaModelManager::init()
+void LuaModelManager::init(int argc, char** argv)
 {
-	int dbcon = 8;
+	work_dir = boost::filesystem::path(argv[0]).parent_path().string() + "/";
+	std::string start_script = work_dir + "start.lua";
+
+	int dbcon = 4;
 	mysql::MysqlConfig sqlconfig;
 	sqlconfig.db = "test";
 	sqlconfig.host = "localhost";
@@ -501,6 +512,12 @@ void LuaModelManager::init()
 		exit(1);
 	}
 
+	// 启动脚本，创建lua模块
+	if(!create_lua_cmd(start_script.c_str())) {
+		DBG("start load error");
+		exit(1);
+	}
+
 	// TODO: 确认脚本path
 	const char* path = "";
 	for (int i = 0; i < dbcon; ++i) {
@@ -514,8 +531,28 @@ void LuaModelManager::init()
 
 void LuaModelManager::uninit()
 {
+	// 停止接收消息处理
 	msgcenter->stop();
 
+	// 把模块删除
+	std::vector<LuaModel::SPtr> models;
+	{
+		auto r = lua_models.readGuard();
+		for(auto& it:r->name2model) {
+			models.push_back(it.second);
+		}
+	}
+	for(auto& it:models) {
+		del_luamodel(it->name.c_str());
+		it->stop();
+	}
+
+	// 停止主循环
+	ios.stop();
+
+	// 
+	mysqlpool.reset();
+	redispool.reset();
 }
 
 struct LuaMsgScriptRun : public GrokRunable {
