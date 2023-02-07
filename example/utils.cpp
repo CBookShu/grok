@@ -12,12 +12,12 @@ struct FileListenerNode {
     std::string path;
     time_t file_last_write_time;
 };
-grok::stdtimerPtr listen_file_modify(grok::WorkStaff *staff, const char *path, std::function<void(const char *)> cb)
+grok::stdtimerPtr listen_file_modify(grok::WorkStaff& staff, const char *path, std::function<void(const char *)> cb)
 {
     auto sptr = std::make_shared<FileListenerNode>();
     sptr->path = path;
     sptr->file_last_write_time = get_file_last_write_time(path);
-    return staff->evp().loopTimer([cb,sptr](){
+    return staff.evp().loopTimer([cb,sptr](){
         auto r = get_file_last_write_time(sptr->path.c_str());
         if (r == 0) {
             return;
@@ -26,5 +26,5 @@ grok::stdtimerPtr listen_file_modify(grok::WorkStaff *staff, const char *path, s
             sptr->file_last_write_time = r;
             cb(sptr->path.c_str());
         }
-    },std::chrono::seconds(30),staff->strand());
+    },std::chrono::seconds(30),staff.strand());
 }

@@ -297,8 +297,6 @@ std::uint32_t grok::NodeClient::msg_msgnextidx()
 MsgCenterSPtr grok::MsgCenter::Create()
 {
     auto sptr = std::make_shared<MsgCenter>();
-    auto thread = std::thread::hardware_concurrency() * 2;
-    sptr->start(thread);
     return sptr;
 }
 

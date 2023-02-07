@@ -1,5 +1,6 @@
 #include "luaModule.h"
 #include <boost/filesystem.hpp>
+#include "utils.h"
 
 static lua_State* create_lua_scripts(const char* path);
 static lua_State* create_lua_model(const char* path);
@@ -7,7 +8,7 @@ static int create_lua_cmd(const char* path);
 
 static int l_core_curdir(lua_State *L) {
 	auto mgr = LuaModelManager::get_instance();
-	// lua_pushstring(L, mgr->imGetDir().c_str());
+	lua_pushstring(L, mgr->work_dir.c_str());
 	return 1;
 }
 
@@ -69,7 +70,7 @@ int luaopen_core(lua_State *L)
 static int l_cmdcore_start(lua_State* L) {
 	// name, path
 	const char* name = luaL_checkstring(L, 1);
-	const char* path = luaL_checkstring(L, 2);
+	std::string path = luaL_checkstring(L, 2);
 
 	auto* mgr = LuaModelManager::get_instance();
 
@@ -82,7 +83,7 @@ static int l_cmdcore_start(lua_State* L) {
 		return 1;
 	}
 
-	auto* model_lua = create_lua_model(path);
+	auto* model_lua = create_lua_model(path.c_str());
 	if(!model_lua) {
 		lua_pushboolean(L, 0);
 		return 1;
@@ -93,17 +94,25 @@ static int l_cmdcore_start(lua_State* L) {
 	m->name = name;
 
 	// 先将创建好的模块注册起来，因为马上要执行了
+	// 该模块是新的，这里的pcall一定不会并发
 	mgr->new_luamodel(name, m);
 
-	// 该模块是新的，这里的pcall一定不会并发
-	lua_pushstring(m->L, name);
-	if(lua_pcall(m->L, 1, 0, 0)) {
-		// 模块代码执行失败
-		DBG("Model Call Error:%s,%s", path, lua_tostring(m->L, -1));
-		// 模块一旦注册，但是调用失败，模块自己不能把自己释放，这里会产生竞争
-		// 应该由执行者关注结果，失败要主动调用cmd_stop来把模块关掉
-	}
-
+	
+	// 开始执行模块的真正代码，model的lua state只能在staff的strand中执行
+	// 避免任何竞争
+	m->staff.async<void>([m,path](){
+		if(!m->L) {
+			return ;
+		}
+		
+		lua_pushstring(m->L, m->name.c_str());
+		if(lua_pcall(m->L, 1, 0, 0)) {
+			// 模块代码执行失败
+			DBG("Model Call Error:%s,%s", path.c_str(), lua_tostring(m->L, -1));
+			// 模块一旦注册，但是调用失败，模块自己不能把自己释放，这里会产生竞争
+			// 应该由执行者关注结果，失败要主动调用cmd_stop来把模块关掉
+		}
+	});
 	DBG("LuaModel start:%s", name);
 	lua_pushboolean(L, 1);
 	return 1;
@@ -119,7 +128,7 @@ static int l_cmdcore_stop(lua_State* L) {
 		return 1;
 	}
 
-	m->stop();
+	mgr->model_stop(m);
 	lua_pushboolean(L, 1);
 	return 1;
 }
@@ -127,7 +136,7 @@ static int l_cmdcore_stop(lua_State* L) {
 static int l_cmdcore_restart(lua_State* L) {
 	// name, path
 	const char* name = luaL_checkstring(L, 1);
-	const char* path = luaL_checkstring(L, 2);
+	std::string path = luaL_checkstring(L, 2);
 
 	auto* mgr = LuaModelManager::get_instance();
 	auto m = mgr->get_luamodel(name);
@@ -138,7 +147,7 @@ static int l_cmdcore_restart(lua_State* L) {
 		return 1;
 	}
 
-	auto* model_lua = create_lua_model(path);
+	auto* model_lua = create_lua_model(path.c_str());
 	if (!model_lua) {
 		lua_pushboolean(L, 0);
 		return 1;
@@ -151,14 +160,21 @@ static int l_cmdcore_restart(lua_State* L) {
 	// 先将创建好的模块注册起来，因为马上要执行了
 	mgr->replace_luamodel(name, m, new_m);
 
-	// 该模块是新的，这里的pcall一定不会并发
-	lua_pushstring(new_m->L, name);
-	if(lua_pcall(new_m->L, 1, 0, 0)) {
-		// 模块代码执行失败
-		DBG("Model Call Error:%s,%s", path, lua_tostring(new_m->L, -1));
-		// 模块一旦注册，但是调用失败，模块自己不能把自己释放，这里会产生竞争
-		// 应该由执行者关注结果，失败要主动调用cmd_stop来把模块关掉
-	}
+	// 开始执行模块的真正代码，model的lua state只能在staff的strand中执行
+	// 避免任何竞争
+	m->staff.async<void>([m,path](){
+		if(!m->L) {
+			return ;
+		}
+		
+		lua_pushstring(m->L, m->name.c_str());
+		if(lua_pcall(m->L, 1, 0, 0)) {
+			// 模块代码执行失败
+			DBG("Model Call Error:%s,%s", path.c_str(), lua_tostring(m->L, -1));
+			// 模块一旦注册，但是调用失败，模块自己不能把自己释放，这里会产生竞争
+			// 应该由执行者关注结果，失败要主动调用cmd_stop来把模块关掉
+		}
+	});
 
 	DBG("LuaModel start:%s", name);
 	lua_pushboolean(L, 1);
@@ -195,8 +211,136 @@ int luaopen_cmdcore(lua_State *L)
 }
 
 
+static int l_modelcore_file_listen(lua_State* L) {
+	const char* name = luaL_checkstring(L, 1);
+	const char* filepath = luaL_checkstring(L, 2);
+	auto callbackid = luaL_checknumber(L, 3);
+
+	auto* mgr = LuaModelManager::get_instance();
+	auto m = mgr->get_luamodel(name);
+	if(!m) {
+		DBG("ModelName Error:%s", name);
+		lua_error(L);
+		return 0;
+	}
+
+	if(L != m->L) {
+		DBG("不能跨模块操作定时器")
+		lua_error(L);
+		return 0;
+	}
+
+	auto it = m->file_listeners.find(filepath);
+	if(it != m->file_listeners.end()) {
+		DBG("文件重复监听:%s", filepath);
+		lua_error(L);
+		return 0;
+	}
+
+	auto timer = listen_file_modify(m->staff, filepath, [m,callbackid](const char* path){
+		if(LuaModelManager::get_instance()->invoke_lua_callback(m->L, callbackid)) {
+			DBG("Callback Error:%lf,%s,%s", callbackid, lua_tostring(m->L, -1), path);
+		}
+	});
+	m->file_listeners[filepath] = timer;
+	return 1;
+}
+
+static int l_modelcore_file_stoplisten(lua_State* L) {
+	const char* name = luaL_checkstring(L, 1);
+	const char* filepath = luaL_checkstring(L, 2);
+	auto callbackid = luaL_checknumber(L, 3);
+
+	auto* mgr = LuaModelManager::get_instance();
+	auto m = mgr->get_luamodel(name);
+	if(!m) {
+		DBG("ModelName Error:%s", name);
+		lua_error(L);
+		return 0;
+	}
+
+	if(L != m->L) {
+		DBG("不能跨模块操作定时器")
+		lua_error(L);
+		return 0;
+	}
+
+	m->file_listeners.erase(filepath);
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
+static int l_modelcore_timer_start(lua_State* L) {
+	const char* name = luaL_checkstring(L, 1);
+	auto callbackid = luaL_checknumber(L, 2);
+	size_t millisec = luaL_checknumber(L, 3);
+
+	auto* mgr = LuaModelManager::get_instance();
+	auto m = mgr->get_luamodel(name);
+	if(!m) {
+		DBG("ModelName Error:%s", name);
+		lua_error(L);
+		return 0;
+	}
+
+	if(L != m->L) {
+		DBG("不能跨模块操作定时器")
+		lua_error(L);
+		return 0;
+	}
+
+	auto timer = m->staff.evp().loopTimer([m,callbackid](){
+		if(LuaModelManager::get_instance()->invoke_lua_callback(m->L, callbackid)) {
+			DBG("Callback Error:%lf,%s", callbackid, lua_tostring(m->L, -1));
+		}
+	}, std::chrono::milliseconds(millisec), m->staff.strand());
+	m->timers[callbackid] = timer;
+
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
+static int l_modelcore_timer_stop(lua_State* L) {
+	const char* name = luaL_checkstring(L, 1);
+	auto callbackid = luaL_checknumber(L, 2);
+
+	auto* mgr = LuaModelManager::get_instance();
+	auto m = mgr->get_luamodel(name);
+	if(!m) {
+		DBG("ModelName Error:%s", name);
+		lua_error(L);
+		return 0;
+	}
+
+	if(L != m->L) {
+		DBG("不能跨模块操作定时器")
+		lua_error(L);
+		return 0;
+	}
+
+	m->timers.erase(callbackid);
+
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
+int luaopen_modelcore(lua_State *L)
+{
+    luaL_Reg reg[] = {
+		{ "modelcore_file_listen", l_modelcore_file_listen },
+		{ "modelcore_file_stoplisten", l_modelcore_file_stoplisten },
+		{ "modelcore_timer_start", l_modelcore_timer_start },
+		{ "modelcore_timer_stop", l_modelcore_timer_stop },
+		{ NULL, NULL },
+	};
+
+	luaL_newlib(L, reg);
+	return 1;
+}
+
 static lua_State* create_lua_scripts(const char* path) {
 	auto*L = luaL_newstate();
+	luaL_openlibs(L);
 	luaL_requiref(L, "core", luaopen_core, 0);
 
 	return L;
@@ -204,7 +348,9 @@ static lua_State* create_lua_scripts(const char* path) {
 
 static lua_State* create_lua_model(const char* path) {
 	auto*L = luaL_newstate();
+	luaL_openlibs(L);
 	luaL_requiref(L, "core", luaopen_core, 0);
+	luaL_requiref(L, "modelcore", luaopen_modelcore, 0);
 
 	auto r = luaL_loadfile(L, path);
 	if (r) {
@@ -219,6 +365,7 @@ static int create_lua_cmd(const char* path) {
 	auto* L = luaL_newstate();
 	std::unique_ptr<lua_State, LuaStateDeleter> guard(L);
 	
+	luaL_openlibs(L);
 	luaL_requiref(L, "core", luaopen_core, 0);
 	luaL_requiref(L, "cmdcore", luaopen_cmdcore, 0);
 
@@ -487,7 +634,10 @@ void LuaModelManager::del_instance()
 
 void LuaModelManager::init(int argc, char** argv)
 {
-	work_dir = boost::filesystem::path(argv[0]).parent_path().string() + "/";
+	if(argc < 2) {
+		return;
+	}
+	work_dir = boost::filesystem::path(argv[1]).string() + "/";
 	std::string start_script = work_dir + "start.lua";
 
 	int dbcon = 4;
@@ -512,6 +662,9 @@ void LuaModelManager::init(int argc, char** argv)
 		exit(1);
 	}
 
+	// 先创建消息分发
+	msgcenter = MsgCenter::Create();
+
 	// 启动脚本，创建lua模块
 	if(!create_lua_cmd(start_script.c_str())) {
 		DBG("start load error");
@@ -525,14 +678,15 @@ void LuaModelManager::init(int argc, char** argv)
 		lua_scripts.Give(L);
 	}
 
-	msgcenter = MsgCenter::Create();
 	msgcenter->start(dbcon);
 }
 
 void LuaModelManager::uninit()
 {
 	// 停止接收消息处理
-	msgcenter->stop();
+	if(msgcenter) {
+		msgcenter->stop();
+	}
 
 	// 把模块删除
 	std::vector<LuaModel::SPtr> models;
@@ -544,7 +698,7 @@ void LuaModelManager::uninit()
 	}
 	for(auto& it:models) {
 		del_luamodel(it->name.c_str());
-		it->stop();
+		model_stop(it);
 	}
 
 	// 停止主循环
@@ -553,6 +707,17 @@ void LuaModelManager::uninit()
 	// 
 	mysqlpool.reset();
 	redispool.reset();
+}
+
+void LuaModelManager::start()
+{
+	boost::asio::io_service::work w(ios);
+	ios.run();
+}
+
+void LuaModelManager::stop()
+{
+	ios.stop();
 }
 
 struct LuaMsgScriptRun : public GrokRunable {
@@ -628,15 +793,25 @@ LuaModel::SPtr LuaModelManager::get_luamodel(const char *name)
 	return it->second;
 }
 
-void LuaModel::stop()
+void LuaModelManager::model_stop(LuaModel::SPtr m)
 {
 	// 保护一下自己，在lua 被删除之前自己不能被摧毁
 	// lua 的操作要线程安全
-	auto self = shared_from_this();
-	staff.async<void>([self](){
+	auto self = m->shared_from_this();
+	m->staff.async<void>([self](){
 		if (self->L) {
 			lua_close(self->L);
 			self->L = nullptr;
 		}
 	});
+}
+
+int LuaModelManager::invoke_lua_callback(lua_State *L, lua_Number cbid)
+{
+	if(!L) {
+		return 0;
+	}
+	lua_getglobal(L, LUA_CALLBACK_MAIN);
+	lua_pushnumber(L, cbid);
+	return lua_pcall(L, 1, 0, 0);
 }

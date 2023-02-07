@@ -17,8 +17,12 @@ int main(int argc, char** argv)
 	luaMgr->init(argc, argv);
 	EventPools::Init();
 
-
-
+	boost::asio::basic_waitable_timer<std::chrono::system_clock> w(luaMgr->ios);
+	w.expires_from_now(std::chrono::seconds(1));
+	w.async_wait([luaMgr](boost::system::error_code ec){
+		luaMgr->stop();
+	});
+	luaMgr->start();
 
 	EventPools::Uinit();
 	luaMgr->uninit();

@@ -46,18 +46,21 @@ struct LuaTable {
 struct LuaModel : public std::enable_shared_from_this<LuaModel> {
     using SPtr = std::shared_ptr<LuaModel>;
 
-    // lua 实例
-    lua_State* L = nullptr;
-    // 模块的缓存
-    grok::grwtype<LuaTable> cache;
-    // 模块的名字
-    std::string name;
+    // staff 控制 begin
     // 模块的队列
     grok::WorkStaff staff;
+    // lua 实例
+    lua_State* L = nullptr;
+    // 模块的加载脚本
+    std::string name;
     // 文件监听
-    std::unordered_map<std::string,grok::stdtimerPtr> file_listener;
+    std::unordered_map<std::string,grok::stdtimerPtr> file_listeners;
+    // 定时器
+     std::unordered_map<double, grok::stdtimerPtr> timers;
+    // staff 控制 end
 
-    void stop();
+    // 模块的缓存[由自己保证竞争安全]
+    grok::grwtype<LuaTable> cache;
 };
 
 struct LuaStateDeleter {
@@ -100,13 +103,20 @@ struct LuaModelManager : public grok::WorkStaff {
     void init(int argc, char** argv);
     void uninit();
 
+    void start();
+    void stop();
 
     void on_msg(grok::Session::Ptr s, grok::MsgPackSPtr p);
 
+    // lua的回调函数用LUA_CALLBACK_FINDER来保存，简单易控
+#define	LUA_CALLBACK_MAIN	    "__LUA_CALLBACK_MAIN__"
+    // lua model 操作函数
     void new_luamodel(const char* name, LuaModel::SPtr m);
     void replace_luamodel(const char* name, LuaModel::SPtr m_old, LuaModel::SPtr m_new);
     LuaModel::SPtr del_luamodel(const char* name);
     LuaModel::SPtr get_luamodel(const char* name);
+    void model_stop(LuaModel::SPtr m);
+    int invoke_lua_callback(lua_State* L, lua_Number cbid);
 };
 
 
@@ -116,4 +126,7 @@ int luaopen_core(lua_State* L);
 
 // 绑定命令接口
 int luaopen_cmdcore(lua_State* L);
+
+// lua model 接口绑定
+int luaopen_modelcore(lua_State* L);
 }
