@@ -54,10 +54,26 @@ static int l_core_get_cache(lua_State*L) {
 	}
 }
 
+static int l_core_log(lua_State*L) {
+	int level = luaL_checknumber(L, 1);
+	const char* log = luaL_checkstring(L, 2);
+
+	static const char* level_tags[] = {
+		"TRACE","DEBUG","INFO","WARN","ERROR"
+	};
+	if (level < 0 || level > (sizeof(level_tags)/sizeof(const char*))) {
+		DBG("[LEVEL:%d]%s", level, log);
+		return 0;
+	}
+	DBG("[%s]%s", level_tags[level], log);
+	return 0;
+}
+
 int luaopen_core(lua_State *L)
 {
 	luaL_Reg reg[] = {
 		{ "core_curdir", l_core_curdir },
+		{ "core_log", l_core_log },
 		{ "core_set_cache", l_core_set_cache},
 		{ "core_get_cache", l_core_get_cache},
 		{ NULL, NULL },
@@ -83,7 +99,8 @@ static int l_cmdcore_start(lua_State* L) {
 		return 1;
 	}
 
-	auto* model_lua = create_lua_model(path.c_str());
+	auto full_path = mgr->work_dir + path;
+	auto* model_lua = create_lua_model(full_path.c_str());
 	if(!model_lua) {
 		lua_pushboolean(L, 0);
 		return 1;
@@ -147,6 +164,7 @@ static int l_cmdcore_restart(lua_State* L) {
 		return 1;
 	}
 
+	auto full_path = mgr->work_dir + path;
 	auto* model_lua = create_lua_model(path.c_str());
 	if (!model_lua) {
 		lua_pushboolean(L, 0);
@@ -215,54 +233,56 @@ static int l_modelcore_file_listen(lua_State* L) {
 	const char* name = luaL_checkstring(L, 1);
 	const char* filepath = luaL_checkstring(L, 2);
 	auto callbackid = luaL_checknumber(L, 3);
+	auto millsec = luaL_checknumber(L, 4);
 
 	auto* mgr = LuaModelManager::get_instance();
 	auto m = mgr->get_luamodel(name);
 	if(!m) {
 		DBG("ModelName Error:%s", name);
-		lua_error(L);
-		return 0;
+		lua_pushboolean(m->L, 0);
+		return 1;
 	}
 
 	if(L != m->L) {
 		DBG("不能跨模块操作定时器")
-		lua_error(L);
-		return 0;
+		lua_pushboolean(m->L, 0);
+		return 1;
 	}
 
 	auto it = m->file_listeners.find(filepath);
 	if(it != m->file_listeners.end()) {
 		DBG("文件重复监听:%s", filepath);
-		lua_error(L);
-		return 0;
+		lua_pushboolean(m->L, 0);
+		return 1;
 	}
 
 	auto timer = listen_file_modify(m->staff, filepath, [m,callbackid](const char* path){
 		if(LuaModelManager::get_instance()->invoke_lua_callback(m->L, callbackid)) {
 			DBG("Callback Error:%lf,%s,%s", callbackid, lua_tostring(m->L, -1), path);
 		}
-	});
+	},millsec);
 	m->file_listeners[filepath] = timer;
+
+	lua_pushboolean(m->L, 1);
 	return 1;
 }
 
 static int l_modelcore_file_stoplisten(lua_State* L) {
 	const char* name = luaL_checkstring(L, 1);
 	const char* filepath = luaL_checkstring(L, 2);
-	auto callbackid = luaL_checknumber(L, 3);
 
 	auto* mgr = LuaModelManager::get_instance();
 	auto m = mgr->get_luamodel(name);
 	if(!m) {
 		DBG("ModelName Error:%s", name);
-		lua_error(L);
-		return 0;
+		lua_pushboolean(m->L, 0);
+		return 1;
 	}
 
 	if(L != m->L) {
 		DBG("不能跨模块操作定时器")
-		lua_error(L);
-		return 0;
+		lua_pushboolean(m->L, 0);
+		return 1;
 	}
 
 	m->file_listeners.erase(filepath);
@@ -279,14 +299,14 @@ static int l_modelcore_timer_start(lua_State* L) {
 	auto m = mgr->get_luamodel(name);
 	if(!m) {
 		DBG("ModelName Error:%s", name);
-		lua_error(L);
-		return 0;
+		lua_pushboolean(m->L, 0);
+		return 1;
 	}
 
 	if(L != m->L) {
 		DBG("不能跨模块操作定时器")
-		lua_error(L);
-		return 0;
+		lua_pushboolean(m->L, 0);
+		return 1;
 	}
 
 	auto timer = m->staff.evp().loopTimer([m,callbackid](){
@@ -308,14 +328,14 @@ static int l_modelcore_timer_stop(lua_State* L) {
 	auto m = mgr->get_luamodel(name);
 	if(!m) {
 		DBG("ModelName Error:%s", name);
-		lua_error(L);
-		return 0;
+		lua_pushboolean(m->L, 0);
+		return 1;
 	}
 
 	if(L != m->L) {
 		DBG("不能跨模块操作定时器")
-		lua_error(L);
-		return 0;
+		lua_pushboolean(m->L, 0);
+		return 1;
 	}
 
 	m->timers.erase(callbackid);
@@ -368,7 +388,7 @@ static int create_lua_cmd(const char* path) {
 	luaL_openlibs(L);
 	luaL_requiref(L, "core", luaopen_core, 0);
 	luaL_requiref(L, "cmdcore", luaopen_cmdcore, 0);
-
+	
 	if(luaL_loadfile(L, path)) {
 		DBG("load file error:%s,%s", path, lua_tostring(L, -1));
 		return 0;
@@ -634,11 +654,21 @@ void LuaModelManager::del_instance()
 
 void LuaModelManager::init(int argc, char** argv)
 {
-	if(argc < 2) {
-		return;
+	if (argc == 1) {
+		// 就把执行文件的目录当成工作目录
+		work_dir = boost::filesystem::path(argv[0]).parent_path().string() + "/";
+	} else if(argc >= 2) {
+		// argv[1] 就是传入的工作目录
+		work_dir = boost::filesystem::path(argv[1]).string() + "/";
 	}
-	work_dir = boost::filesystem::path(argv[1]).string() + "/";
-	std::string start_script = work_dir + "start.lua";
+	if(!boost::filesystem::is_directory(work_dir)) {
+		DBG("err work dir:%s", work_dir.c_str());
+		exit(0);
+	}
+	boost::filesystem::current_path(work_dir);
+
+	// 脚本目录在 work_dir下的scripts中
+	std::string start_script = work_dir + LUA_PROJECT_DIR + "start.lua";
 
 	int dbcon = 4;
 	mysql::MysqlConfig sqlconfig;
@@ -648,19 +678,19 @@ void LuaModelManager::init(int argc, char** argv)
 	sqlconfig.user = "cbookshu";
 	sqlconfig.pwd = "cs123456";
 	mysqlpool = mysql::MysqlPool::Create(dbcon, sqlconfig);
-	if(!mysqlpool->GetByGuard()->GetCtx()) {
-		DBG("mysql con error");
-		exit(1);
-	}
+	// if(!mysqlpool->GetByGuard()->GetCtx()) {
+	// 	DBG("mysql con error");
+	// 	exit(1);
+	// }
 
 	redis::RedisConfig rdsconfig;
 	rdsconfig.url = "localhost";
 	rdsconfig.port = 6379;
 	redispool = redis::RedisConPool::Create(dbcon, rdsconfig);
-	if(!redispool->GetByGuard()->GetCtx()) {
-		DBG("redis con error");
-		exit(1);
-	}
+	// if(!redispool->GetByGuard()->GetCtx()) {
+	// 	DBG("redis con error");
+	// 	exit(1);
+	// }
 
 	// 先创建消息分发
 	msgcenter = MsgCenter::Create();

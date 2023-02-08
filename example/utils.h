@@ -4,4 +4,5 @@
 grok::stdtimerPtr  listen_file_modify(
     grok::WorkStaff& staff, 
     const char* path, 
-    std::function<void(const char*)> cb);
+    std::function<void(const char*)> cb,
+    int millsec);

@@ -110,6 +110,7 @@ struct LuaModelManager : public grok::WorkStaff {
 
     // lua的回调函数用LUA_CALLBACK_FINDER来保存，简单易控
 #define	LUA_CALLBACK_MAIN	    "__LUA_CALLBACK_MAIN__"
+#define LUA_PROJECT_DIR         "scripts/"
     // lua model 操作函数
     void new_luamodel(const char* name, LuaModel::SPtr m);
     void replace_luamodel(const char* name, LuaModel::SPtr m_old, LuaModel::SPtr m_new);
