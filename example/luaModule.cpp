@@ -656,15 +656,19 @@ void LuaModelManager::init(int argc, char** argv)
 {
 	if (argc == 1) {
 		// 就把执行文件的目录当成工作目录
-		work_dir = boost::filesystem::path(argv[0]).parent_path().string() + "/";
+		work_dir = boost::filesystem::path(argv[0]).parent_path().generic_string();
 	} else if(argc >= 2) {
 		// argv[1] 就是传入的工作目录
-		work_dir = boost::filesystem::path(argv[1]).string() + "/";
+		work_dir = boost::filesystem::path(argv[1]).generic_string();
 	}
 	if(!boost::filesystem::is_directory(work_dir)) {
 		DBG("err work dir:%s", work_dir.c_str());
 		exit(0);
 	}
+	if(work_dir.back() != '/') {
+		work_dir.append("/");
+	}
+
 	boost::filesystem::current_path(work_dir);
 
 	// 脚本目录在 work_dir下的scripts中
