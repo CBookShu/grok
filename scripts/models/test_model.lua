@@ -1,6 +1,7 @@
 local self_model_name = ...
 print("this is model:", self_model_name)
 
+require "scripts.utils.functions"
 local lcore = require "scripts.core.lcore"
 local lmodel = require "scripts.core.lmodel"
 
@@ -21,3 +22,13 @@ timer2 = lmodel.timer_start(self_model_name, function ()
     lmodel.timer_stop(self_model_name, timer2)
     lmodel.file_stoplisten(self_model_name, "test.txt")
 end, 10000)
+
+local test_cache = {
+    username = "test",
+    age = 1,
+    status = "sleep"
+}
+lcore.set_cache(self_model_name, test_cache)
+local cache = lcore.get_cache(self_model_name)
+local s = debug_table(cache)
+lcore.logtrace(s)
