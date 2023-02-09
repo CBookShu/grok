@@ -23,6 +23,7 @@ timer2 = lmodel.timer_start(self_model_name, function ()
     lmodel.file_stoplisten(self_model_name, "test.txt")
 end, 10000)
 
+-- cache val接口
 local test_cache = {
     username = "test",
     age = 1,
@@ -32,3 +33,31 @@ lcore.set_cache(self_model_name, test_cache)
 local cache = lcore.get_cache(self_model_name)
 local s = debug_table(cache)
 lcore.logtrace(s)
+
+-- protobuf接口
+local protobuf = require "scripts.utils.protobuf"
+local curdir = lcore.curdir()
+lcore.logtrace("cur dir:%s", curdir)
+protobuf.register_file("scripts/models/test_model.pb")
+local sun_info = {
+    -- string name = 1;
+    -- int32 age = 2;
+    -- string addr = 3;
+    name = "SunWuKong",
+    age = 500,
+    addr = "HuaGuoShan"
+}
+local pbdata = protobuf.encode("test_model.Test_Model_Msg1", sun_info)
+local pbdata_str = convert_pbdata_to_str(pbdata)
+lcore.logtrace("Sun_info pbdata_str:%s", pbdata_str)
+
+local sun_info_1 = protobuf.decode("test_model.Test_Model_Msg1", pbdata)
+local sun_info_1_des = debug_table(sun_info_1)
+lcore.logtrace("sun_info_1_des:%s", sun_info_1_des)
+
+-- cache key val接口
+lcore.set_cache(self_model_name, "sun_info", sun_info)
+local sun_info_cache = lcore.get_cache(self_model_name, "sun_info")
+local sun_info_cache_des = debug_table(sun_info_cache or {})
+lcore.logtrace("sun_info_cache_des:%s", sun_info_cache_des)
+

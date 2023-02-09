@@ -1,0 +1,8 @@
+syntax = "proto3";
+package test_model;
+
+message Test_Model_Msg1 {
+    string name = 1;
+    int32 age = 2;
+    string addr = 3;
+}
