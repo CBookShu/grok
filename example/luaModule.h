@@ -123,11 +123,13 @@ struct LuaModelManager : public grok::WorkStaff {
 
 extern "C" {
 // 绑定基础接口
-int luaopen_core(lua_State* L);
+LUAMOD_API int luaopen_core(lua_State* L);
 
 // 绑定命令接口
-int luaopen_cmdcore(lua_State* L);
+LUAMOD_API int luaopen_cmdcore(lua_State* L);
 
 // lua model 接口绑定
-int luaopen_modelcore(lua_State* L);
+LUAMOD_API int luaopen_modelcore(lua_State* L);
+
+// 
 }

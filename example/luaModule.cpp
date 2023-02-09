@@ -1,6 +1,7 @@
 #include "luaModule.h"
 #include <boost/filesystem.hpp>
 #include "utils.h"
+#include "pbc-lua.h"
 
 static lua_State* create_lua_scripts(const char* path);
 static lua_State* create_lua_model(const char* path);
@@ -361,14 +362,15 @@ int luaopen_modelcore(lua_State *L)
 static lua_State* create_lua_scripts(const char* path) {
 	auto*L = luaL_newstate();
 	luaL_openlibs(L);
+	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
 	luaL_requiref(L, "core", luaopen_core, 0);
-
 	return L;
 }
 
 static lua_State* create_lua_model(const char* path) {
 	auto*L = luaL_newstate();
 	luaL_openlibs(L);
+	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
 	luaL_requiref(L, "core", luaopen_core, 0);
 	luaL_requiref(L, "modelcore", luaopen_modelcore, 0);
 
@@ -386,9 +388,10 @@ static int create_lua_cmd(const char* path) {
 	std::unique_ptr<lua_State, LuaStateDeleter> guard(L);
 	
 	luaL_openlibs(L);
+	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
 	luaL_requiref(L, "core", luaopen_core, 0);
 	luaL_requiref(L, "cmdcore", luaopen_cmdcore, 0);
-	
+
 	if(luaL_loadfile(L, path)) {
 		DBG("load file error:%s,%s", path, lua_tostring(L, -1));
 		return 0;
@@ -579,7 +582,7 @@ bool LuaTable::t_packval(lua_State *L, int id, Var &v)
 				return false;
 			}
 			t.set_value(_k, _v);
-			lua_pop(L, 2);
+			lua_pop(L, 1);
 		}
 		v = std::move(t);
 	}
