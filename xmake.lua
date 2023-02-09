@@ -100,6 +100,13 @@ target("luabind_test")
     add_deps("lua")
     add_files("test/luabind_test/*.cpp")
 
+target("test_group")
+    set_kind("phony")
+    set_group("test")
+    on_run(function(target) 
+        os.exec("xmake run example $(projectdir)")
+    end)
+
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --
