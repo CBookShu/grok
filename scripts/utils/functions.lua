@@ -60,4 +60,20 @@ function string.split(input, delimiter)
     table.insert(arr, string.sub(input, pos))
     return arr
 end
---endregion
+
+function convert_pbdata_to_str(pbdata)
+    if not pbdata then
+        return ""
+    end
+    local s = {}
+    for i = 1, #pbdata do
+        local c = string.byte(pbdata, i,i)
+        table.insert(s, tostring(c))
+    end
+    return table.concat(s, ",")
+end
+
+function convert_str_to_pbdata(str)
+    local  s = string.split(str or {}, ",")
+    return string.char(unpack(s))
+end
