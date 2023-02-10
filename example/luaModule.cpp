@@ -359,6 +359,114 @@ int luaopen_modelcore(lua_State *L)
 	return 1;
 }
 
+static int l_dbcore_mysql_get(lua_State* L) {
+	luaL_argcheck(L, lua_isfunction(L, 1), 1, "function need");
+	auto* mgr = LuaModelManager::get_instance();
+	assert(mgr);
+	auto guard = mgr->mysqlpool->GetByGuard();
+	grok::mysql::MysqlPool::Guard* g = &guard;
+	lua_pushlightuserdata(L, g);
+	int n = lua_gettop(L);
+	int r = lua_pcall(L, 1, 1, 0);
+	if(r) {
+		DBG("call error:%s", lua_tostring(L, -1));
+		lua_pushnumber(L, -1);
+		return 1;
+	}
+	return 1;
+}
+
+static int l_dbcore_mysql_query(lua_State*L) {
+	// p1: grok::mysql::MysqlPool::Guard*
+	/*	p2: table {
+			query = mysql_string,
+			calback? = 回调查询结果,
+			argv? = query中?绑定的参数
+		}
+	*/ 
+	luaL_argcheck(L, lua_islightuserdata(L, 1), 1, "mysql guard need");
+	luaL_argcheck(L, lua_istable(L, 2), 2, "param table need");
+	auto* g = (grok::mysql::MysqlPool::Guard*)lua_touserdata(L, 1);
+	assert(g);
+
+	lua_getfield(L, 2, "query"); // L3 query 
+	size_t sz = 0;
+	const char* query = luaL_checklstring(L, -1, &sz);
+
+	lua_getfield(L, 2, "argv"); // L4 argv
+	if(lua_istable(L, -1)) {
+		auto query_fmt = grok::mysql::SqlTextMaker::Create(query);
+		lua_Integer len = luaL_len(L, 4);
+		luaL_argcheck(L, query_fmt.ParamsCount() == len, 4, "argv param count error");
+
+		for (lua_Integer i = 1; i <= len; ++i) {
+			lua_geti(L, 4, i);	// L5 argi
+			auto tt = lua_type(L, 5);
+			// 暂时仅考虑两种情况即 number,string，不允许嵌套
+			if (tt == LUA_TNUMBER) {
+				query_fmt.BindParam(g->Get()->GetCtx(), i-1, luaL_checknumber(L, 6));
+			} else if (tt == LUA_TSTRING) {
+				size_t n = 0;
+				const char* arg_str = luaL_checklstring(L, 6, &n);
+				query_fmt.BindParam(g->Get()->GetCtx(), i-1, arg_str, n);
+			} else {
+				luaL_error(L, "mysql query error type:%d", tt);
+			}
+			lua_pop(L, 1); // pop L5
+		}
+
+		lua_getfield(L, 2, "callback");// L5 callback
+
+		auto sql = query_fmt.GetSqlText();
+		if (!lua_isfunction(L, 5)) {
+			// 不需要回调
+			auto res = g->Get()->Query(sql.c_str(), sql.size());
+			lua_pushnumber(L, res);
+			return 1;
+		}
+		// 需要回调
+		auto res = g->Get()->QueryResult(sql.c_str(), sql.size());
+		grok::mysql::Records* record = &res;
+		lua_pushlightuserdata(L, record); // L6 records
+		int r = lua_pcall(L, 1, 1, 0);
+		if (r) {
+			DBG("call error:%s", lua_tostring(L, -1));
+			return 1;
+		}
+		return 1;
+	}
+
+	lua_getfield(L, 2, "callback");// L5 callback
+	if (!lua_isfunction(L, 5)) {
+		// 不需要回调
+		auto res = g->Get()->Query(query, sz);
+		lua_pushnumber(L, res);
+		return 1;
+	}
+	// 需要回调
+	auto res = g->Get()->QueryResult(query, sz);
+	grok::mysql::Records* record = &res;
+	lua_pushlightuserdata(L, record); // L6 records
+	int r = lua_pcall(L, 1, 1, 0);
+	if (r) {
+		DBG("call error:%s", lua_tostring(L, -1));
+		return 1;
+	}
+	return 1;
+}
+
+LUAMOD_API int luaopen_dbcore(lua_State *L)
+{
+	    luaL_Reg reg[] = {
+		{ "dbcore_mysql_get", l_dbcore_mysql_get },
+		{ "dbcore_mysql_query", l_dbcore_mysql_query },
+		{ NULL, NULL },
+	};
+
+	luaL_newlib(L, reg);
+	return 1;
+}
+
 static lua_State* create_lua_scripts(const char* path) {
 	auto*L = luaL_newstate();
 	luaL_openlibs(L);

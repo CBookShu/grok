@@ -131,5 +131,6 @@ LUAMOD_API int luaopen_cmdcore(lua_State* L);
 // lua model 接口绑定
 LUAMOD_API int luaopen_modelcore(lua_State* L);
 
-// 
+// 绑定db接口
+LUAMOD_API int luaopen_dbcore(lua_State* L);
 }
