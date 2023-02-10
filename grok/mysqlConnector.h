@@ -92,7 +92,9 @@ namespace grok::mysql
 
         void BindParam(MYSQL* con,int pos, const char* s);
         // 二进制数据
-        void BindParam(MYSQL* con, int pos, std::string& s);
+        void BindParam(MYSQL* con, int pos, std::string&s);
+        void BindParam(MYSQL* con, int pos, const char* s, size_t n);
+        
         template <typename T>
         void BindParam(MYSQL* con,int pos, T t) {
             static_assert(std::is_arithmetic<T>::value);
@@ -107,6 +109,10 @@ namespace grok::mysql
         template <typename T>
         static void Bind(MYSQL* con, SqlTextMaker&stm, int& pos, T&& t) {
             stm.BindParam(con, pos, t);
+        }
+
+        static void Bind(MYSQL* con, SqlTextMaker&stm,int& pos) {
+            // 当传入参数是空的时候，什么都不调用
         }
 
         template <typename Head, typename...Args>

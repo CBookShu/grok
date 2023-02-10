@@ -289,6 +289,17 @@ void grok::mysql::SqlTextMaker::BindParam(MYSQL *con, int pos, std::string &s) {
     stmt_splice[pos].append("'");
 }
 
+void grok::mysql::SqlTextMaker::BindParam(MYSQL *con, int pos, const char *s, size_t n)
+{
+    auto len = n * 2 + 1;
+    params[pos].resize(len);
+    auto newlen = mysql_real_escape_string(con, (char*)params[pos].data(), s, len);
+    params[pos].resize(newlen);
+    
+    params[pos].append("'");
+    stmt_splice[pos].append("'");
+}
+
 MYSQL *grok::mysql::MysqlClient::GetCtx()
 {
     if(CheckValid()) {

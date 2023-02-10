@@ -65,6 +65,9 @@ static void test_datasetget(MysqlPool::SPtr pool) {
         assert(result.GetString(1) == "hello4");
         assert(result.GetBlob(2) == "sdfsdf");
     }
+
+    // fmt中?为空的情况
+    assert(pool->QueryStm("INSERT INTO testtable (n1,s2,b3) VALUES(5,\"hello5\", \"world5\")") == 1);
 }
 
 int main(int argc, char** argv) {
