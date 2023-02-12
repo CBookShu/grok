@@ -78,6 +78,7 @@ int grok::mysql::Records::FindField(const char *name)
             return i;
         }
     }
+    DBG("Error Field:%s", name);
     return -1;
 }
 
@@ -101,7 +102,7 @@ boost::string_view grok::mysql::Records::GetString(int col)
     if(col >= 0 && col < n) {
         return res->current_row[col];
     }
-    return nullptr;
+    return "";
 }
 
 boost::string_view grok::mysql::Records::GetString(const char *name)
@@ -223,7 +224,7 @@ boost::string_view grok::mysql::Records::GetBlob(int col)
     if(col >= 0 && col < n) {
         return boost::string_view(res->current_row[col], res->lengths[col]) ;
     }
-    return nullptr;
+    return "";
 }
 
 boost::string_view grok::mysql::Records::GetBlob(const char *name)

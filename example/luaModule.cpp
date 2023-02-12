@@ -2,6 +2,162 @@
 #include <boost/filesystem.hpp>
 #include "utils.h"
 #include "pbc-lua.h"
+#include <tuple>
+
+namespace detail {
+	template <typename F>
+	struct FunctionTrait;
+
+	template <typename R, typename O, typename...Args>
+	struct FunctionTrait<R(O::*)(Args...)> {
+		using RType = R;
+		using ArgsType = std::tuple<Args...>;
+		enum {Argc = sizeof...(Args)} ;
+		using OType = O;
+	};
+
+	template <size_t ...N>
+	struct Is {};
+
+	template <size_t P, size_t... I>
+	struct MakeIs;
+
+	template <size_t... I>
+	struct MakeIs<0, I...> {
+		using Type = Is<I...>;
+	};
+
+	template <size_t B, size_t... I>
+	struct MakeIs : MakeIs<B - 1, B, I...> {};
+
+	template <typename T>
+	struct LuaToCppType;
+
+	template<>
+	struct LuaToCppType<const char*> {
+		static const char* conver(lua_State* L, int i) {
+			return luaL_checkstring(L, i);
+		}
+	};
+
+	template<>
+	struct LuaToCppType<std::string> {
+		static std::string conver(lua_State* L, int i) {
+			size_t sz = 0;
+			const char* p = luaL_checklstring(L, i, &sz);
+			return std::string(p, sz);
+		}
+	};
+
+	template <typename T>
+	struct CppToLuaType;
+
+	template <>
+	struct CppToLuaType<boost::string_view> {
+		static void conver(lua_State* L, boost::string_view v) {
+			lua_pushlstring(L, v.data(), v.size());
+			return ;
+		}
+	};
+
+	template<>
+	struct CppToLuaType<boost::optional<long double>> {
+		static void conver(lua_State* L, boost::optional<long double>& v) {
+			if (v.is_initialized()) {
+				lua_pushnumber(L, v.get());
+			} else {
+				lua_pushnil(L);
+			}
+			return ;
+		}
+	};
+
+	template<>
+	struct CppToLuaType<boost::optional<std::int64_t>> {
+		static void conver(lua_State* L, boost::optional<std::int64_t> v) {
+			if (v.is_initialized()) {
+				lua_pushnumber(L, v.get());
+			} else {
+				lua_pushnil(L);
+			}
+			return ;
+		}
+	};
+
+	template<>
+	struct CppToLuaType<boost::optional<std::uint64_t>> {
+		static void conver(lua_State* L, boost::optional<std::uint64_t>& v) {
+			if (v.is_initialized()) {
+				lua_pushnumber(L, v.get());
+			} else {
+				lua_pushnil(L);
+			}
+			return ;
+		}
+	};
+
+	template<>
+	struct CppToLuaType<bool> {
+		static void conver(lua_State* L, bool v) {
+			lua_pushboolean(L, v ? 1 : 0);
+			return;
+		}
+	};
+
+
+	template <typename O, typename R, typename ...Args, size_t ...I>
+	R cpp_func_call_by_lua_helper_var_t(lua_State* L, O* o, R(O::*func)(Args...), Is<I...>) {
+		return ((*o).*func)(LuaToCppType<Args>::conver(L, 1 + I)...);
+	}
+
+	template<typename O, typename R, typename ...Args>
+	int cpp_func_call_by_lua(lua_State* L) {
+		const char* tname = typeid(O).name();
+		O* o = (O*)luaL_checkudata(L, 1, tname);
+		luaL_argcheck(L, o != nullptr, 1, tname);
+		auto func = *(R(O::**)(Args...)) lua_touserdata(L, lua_upvalueindex(1));
+		CppToLuaType<R>::conver(L, cpp_func_call_by_lua_helper_var_t<O,R,Args...>(L, o, func,typename MakeIs<sizeof...(Args)>::Type()));
+		return 1;
+	}
+
+	template<typename O, typename ...Args>
+	int cpp_func_call_by_lua_void(lua_State* L) {
+		const char* tname = typeid(O).name();
+		O* o = (O*)luaL_checkudata(L, 1, tname);
+		luaL_argcheck(L, o != nullptr, 1, tname);
+		auto func = *(void(O::**)(Args...)) lua_touserdata(L, lua_upvalueindex(1));
+		cpp_func_call_by_lua_helper_var_t<O,void,Args...>(L, o, func,typename  MakeIs<sizeof...(Args)>::Type());
+		return 0;
+	}
+
+	// template <typename F>
+	// static int Helper_Bind_Cpp_Func(lua_State* L, const char* fname, F f) {
+	// 	using FuncTrait = FunctionTrait<F>;
+	// 	if constexpr (std::is_void<FuncTrait::RType>::value) {
+
+	// 	} else {
+
+	// 	}
+	// }
+
+	template <typename O, typename R, typename ...Args>
+	static void Helper_Bind_Cpp_Func(lua_State* L, const char* fname, R(O::*func)(Args...), char* mem) {
+		lua_pushstring(L, fname);
+		new(mem) (R(O::*)(Args...)) (func);
+		lua_pushlightuserdata(L, mem);
+		lua_pushcclosure(L, cpp_func_call_by_lua<O,R,Args...>, 1);
+		lua_settable(L, -3);
+	}
+
+	template <typename O, typename ...Args>
+	static void Helper_Bind_Cpp_Func(lua_State* L, const char* fname, void(O::*func)(Args...),char* mem) {
+		lua_pushstring(L, fname);
+		new(mem) (void(O::*)(Args...)) (func);
+		lua_pushlightuserdata(L, mem);
+		lua_pushcclosure(L, cpp_func_call_by_lua_void<O,Args...>, 1);
+		lua_settable(L, -3);
+	}
+}	
 
 static lua_State* create_lua_scripts(const char* path);
 static lua_State* create_lua_model(const char* path);
@@ -359,14 +515,112 @@ int luaopen_modelcore(lua_State *L)
 	return 1;
 }
 
+static int l_dbcore_mysql_query(lua_State*L) {
+	//  p1: grok::mysql::MysqlPool::Guard*
+	/*	p2: table {
+			query = mysql_string,
+			callback? = 回调查询结果,
+			argv? = query中?绑定的参数
+		}
+	*/ 
+	const char* tname = typeid(grok::mysql::MysqlClient).name();
+	auto* g = (grok::mysql::MysqlClient*)luaL_checkudata(L, 1, tname);
+	luaL_argcheck(L, lua_istable(L, 2), 2, "param table need");
+
+	lua_getfield(L, 2, "query"); // L3 query 
+	std::string query = luaL_checkstring(L, -1);
+
+	lua_getfield(L, 2, "argv"); // L4 argv
+	if(lua_istable(L, -1)) {
+		auto query_fmt = grok::mysql::SqlTextMaker::Create(query.c_str());
+		lua_Integer len = luaL_len(L, 4);
+		luaL_argcheck(L, query_fmt.ParamsCount() == len, 4, "argv param count error");
+
+		for (lua_Integer i = 1; i <= len; ++i) {
+			lua_geti(L, 4, i);	// L5 argi
+			auto tt = lua_type(L, 5);
+			// 暂时仅考虑两种情况即 number,string，不允许嵌套
+			if (tt == LUA_TNUMBER) {
+				query_fmt.BindParam(g->GetCtx(), i-1, luaL_checknumber(L, 5));
+			} else if (tt == LUA_TSTRING) {
+				size_t n = 0;
+				const char* arg_str = luaL_checklstring(L, 5, &n);
+				query_fmt.BindParam(g->GetCtx(), i-1, arg_str, n);
+			} else {
+				luaL_error(L, "mysql query error type:%d", tt);
+			}
+			lua_pop(L, 1); // pop L5
+		}
+
+		lua_getfield(L, 2, "callback");// L5 callback
+
+		query = query_fmt.GetSqlText();
+	}
+
+	lua_getfield(L, 2, "callback");// L5 callback
+	if (!lua_isfunction(L, 5)) {
+		// 不需要回调
+		auto res = g->Query(query.c_str(), query.size());
+		lua_pushnumber(L, res);
+		return 1;
+	}
+	// 需要回调
+	auto res = g->QueryResult(query.c_str(), query.size());
+	grok::mysql::Records* record = &res;
+	lua_pushlightuserdata(L, record); // L6 records
+	// 设置元表
+	tname = typeid(grok::mysql::Records).name();
+	if(luaL_newmetatable(L, tname)) {
+		lua_pushstring(L, "__index");
+		lua_pushvalue(L, -2);
+		lua_settable(L, -3);	// metatable.__index = metatable
+
+		using Records = grok::mysql::Records;
+		static char t_func_next_mem[sizeof(&Records::Next)];
+		detail::Helper_Bind_Cpp_Func(L, "next", &Records::Next, t_func_next_mem);
+
+		using t_func_is_null = bool (Records::*)(const char*);
+		static char t_func_is_null_mem[sizeof((t_func_is_null)&Records::IsNull)];
+		detail::Helper_Bind_Cpp_Func(L, "is_null", (t_func_is_null)&Records::IsNull, t_func_is_null_mem);
+
+		using t_func_get_string = boost::string_view (Records::*)(const char*);
+		static char t_func_get_string_mem[sizeof((t_func_get_string)&Records::GetString)];
+		detail::Helper_Bind_Cpp_Func(L, "get_string", (t_func_get_string)&Records::GetString, t_func_get_string_mem);
+
+		using t_func_get_blob = boost::string_view (Records::*)(const char*);
+		static char t_func_get_blob_mem[sizeof((t_func_get_blob)&Records::GetBlob)];
+		detail::Helper_Bind_Cpp_Func(L, "get_blob", (t_func_get_blob)&Records::GetBlob, t_func_get_blob_mem);
+	}
+	lua_setmetatable(L, -2);
+	int r = lua_pcall(L, 1, 1, 0);
+	if (r) {
+		DBG("call error:%s", lua_tostring(L, -1));
+		return 1;
+	}
+	return 1;
+}
+
 static int l_dbcore_mysql_get(lua_State* L) {
 	luaL_argcheck(L, lua_isfunction(L, 1), 1, "function need");
 	auto* mgr = LuaModelManager::get_instance();
 	assert(mgr);
 	auto guard = mgr->mysqlpool->GetByGuard();
-	grok::mysql::MysqlPool::Guard* g = &guard;
-	lua_pushlightuserdata(L, g);
-	int n = lua_gettop(L);
+	grok::mysql::MysqlClient* db = guard.Get();
+	lua_pushlightuserdata(L, db);
+	// 给grok::mysql::MysqlPool::Guard*类型的userdata,安装一个元表,绑定所需要的函数
+	const char* tname = typeid(grok::mysql::MysqlClient).name();
+	if (luaL_newmetatable(L, tname)) {
+		// 首次创建元表
+		lua_pushstring(L, "__index");
+		lua_pushvalue(L, -2);
+		lua_settable(L, -3);	// metatable.__index = metatable
+
+		// 给metable添加函数
+		lua_pushstring(L, "query");
+		lua_pushcfunction(L, l_dbcore_mysql_query);
+		lua_settable(L, -3);
+	}
+	lua_setmetatable(L, -2);
 	int r = lua_pcall(L, 1, 1, 0);
 	if(r) {
 		DBG("call error:%s", lua_tostring(L, -1));
@@ -376,90 +630,10 @@ static int l_dbcore_mysql_get(lua_State* L) {
 	return 1;
 }
 
-static int l_dbcore_mysql_query(lua_State*L) {
-	// p1: grok::mysql::MysqlPool::Guard*
-	/*	p2: table {
-			query = mysql_string,
-			calback? = 回调查询结果,
-			argv? = query中?绑定的参数
-		}
-	*/ 
-	luaL_argcheck(L, lua_islightuserdata(L, 1), 1, "mysql guard need");
-	luaL_argcheck(L, lua_istable(L, 2), 2, "param table need");
-	auto* g = (grok::mysql::MysqlPool::Guard*)lua_touserdata(L, 1);
-	assert(g);
-
-	lua_getfield(L, 2, "query"); // L3 query 
-	size_t sz = 0;
-	const char* query = luaL_checklstring(L, -1, &sz);
-
-	lua_getfield(L, 2, "argv"); // L4 argv
-	if(lua_istable(L, -1)) {
-		auto query_fmt = grok::mysql::SqlTextMaker::Create(query);
-		lua_Integer len = luaL_len(L, 4);
-		luaL_argcheck(L, query_fmt.ParamsCount() == len, 4, "argv param count error");
-
-		for (lua_Integer i = 1; i <= len; ++i) {
-			lua_geti(L, 4, i);	// L5 argi
-			auto tt = lua_type(L, 5);
-			// 暂时仅考虑两种情况即 number,string，不允许嵌套
-			if (tt == LUA_TNUMBER) {
-				query_fmt.BindParam(g->Get()->GetCtx(), i-1, luaL_checknumber(L, 6));
-			} else if (tt == LUA_TSTRING) {
-				size_t n = 0;
-				const char* arg_str = luaL_checklstring(L, 6, &n);
-				query_fmt.BindParam(g->Get()->GetCtx(), i-1, arg_str, n);
-			} else {
-				luaL_error(L, "mysql query error type:%d", tt);
-			}
-			lua_pop(L, 1); // pop L5
-		}
-
-		lua_getfield(L, 2, "callback");// L5 callback
-
-		auto sql = query_fmt.GetSqlText();
-		if (!lua_isfunction(L, 5)) {
-			// 不需要回调
-			auto res = g->Get()->Query(sql.c_str(), sql.size());
-			lua_pushnumber(L, res);
-			return 1;
-		}
-		// 需要回调
-		auto res = g->Get()->QueryResult(sql.c_str(), sql.size());
-		grok::mysql::Records* record = &res;
-		lua_pushlightuserdata(L, record); // L6 records
-		int r = lua_pcall(L, 1, 1, 0);
-		if (r) {
-			DBG("call error:%s", lua_tostring(L, -1));
-			return 1;
-		}
-		return 1;
-	}
-
-	lua_getfield(L, 2, "callback");// L5 callback
-	if (!lua_isfunction(L, 5)) {
-		// 不需要回调
-		auto res = g->Get()->Query(query, sz);
-		lua_pushnumber(L, res);
-		return 1;
-	}
-	// 需要回调
-	auto res = g->Get()->QueryResult(query, sz);
-	grok::mysql::Records* record = &res;
-	lua_pushlightuserdata(L, record); // L6 records
-	int r = lua_pcall(L, 1, 1, 0);
-	if (r) {
-		DBG("call error:%s", lua_tostring(L, -1));
-		return 1;
-	}
-	return 1;
-}
-
 LUAMOD_API int luaopen_dbcore(lua_State *L)
 {
-	    luaL_Reg reg[] = {
+	luaL_Reg reg[] = {
 		{ "dbcore_mysql_get", l_dbcore_mysql_get },
-		{ "dbcore_mysql_query", l_dbcore_mysql_query },
 		{ NULL, NULL },
 	};
 
@@ -472,6 +646,7 @@ static lua_State* create_lua_scripts(const char* path) {
 	luaL_openlibs(L);
 	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
 	luaL_requiref(L, "core", luaopen_core, 0);
+	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
 	return L;
 }
 
@@ -481,6 +656,7 @@ static lua_State* create_lua_model(const char* path) {
 	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
 	luaL_requiref(L, "core", luaopen_core, 0);
 	luaL_requiref(L, "modelcore", luaopen_modelcore, 0);
+	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
 
 	auto r = luaL_loadfile(L, path);
 	if (r) {
@@ -499,6 +675,7 @@ static int create_lua_cmd(const char* path) {
 	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
 	luaL_requiref(L, "core", luaopen_core, 0);
 	luaL_requiref(L, "cmdcore", luaopen_cmdcore, 0);
+	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
 
 	if(luaL_loadfile(L, path)) {
 		DBG("load file error:%s,%s", path, lua_tostring(L, -1));
@@ -793,10 +970,10 @@ void LuaModelManager::init(int argc, char** argv)
 	sqlconfig.user = "cbookshu";
 	sqlconfig.pwd = "cs123456";
 	mysqlpool = mysql::MysqlPool::Create(dbcon, sqlconfig);
-	// if(!mysqlpool->GetByGuard()->GetCtx()) {
-	// 	DBG("mysql con error");
-	// 	exit(1);
-	// }
+	if(!mysqlpool->GetByGuard()->GetCtx()) {
+		DBG("mysql con error");
+		exit(1);
+	}
 
 	redis::RedisConfig rdsconfig;
 	rdsconfig.url = "localhost";

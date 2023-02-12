@@ -61,3 +61,36 @@ local sun_info_cache = lcore.get_cache(self_model_name, "sun_info")
 local sun_info_cache_des = debug_table(sun_info_cache or {})
 lcore.logtrace("sun_info_cache_des:%s", sun_info_cache_des)
 
+
+-- dbcore 测试用例
+local ldbcore = require "scripts.core.ldbcore"
+ldbcore.mysql_get(function (db)
+    local t = ldbcore.mysql_wrapper_query(db)
+    -- t:query("SELECT NOW() AS T", function (r)
+    --     local res = ldbcore.mysql_wrapper_res(r)
+    --     assert(res:next())
+    --     local time = res:get_string("T")
+    --     print("now is:", time)
+    -- end)
+
+    assert(t:query("DROP table IF EXISTS testtable") ~= -1)
+    assert(t:query([[CREATE TABLE IF NOT EXISTS `testtable` (
+    `n1` int(11) DEFAULT NULL,
+    `s2` varchar(255) DEFAULT NULL,
+    `b3` blob
+    ) ENGINE=InnoDB DEFAULT CHARSET=latin1;]]) ~= 1)
+    assert(t:query("INSERT INTO testtable (n1,s2) VALUES(1, 'hello1')") == 1)
+    assert(t:query("INSERT INTO testtable (n1,s2) VALUES(?, ?)", nil, 2, "hello2") == 1)
+
+    t:query("SELECT * FROM testtable", function (r)
+        local res = ldbcore.mysql_wrapper_res(r)
+        for i = 1, 2 do
+            assert(res:next())
+            local n1 = res:get_num("n1")
+            local s2 = res:get_string("s2")
+            print(string.format("n1 = %d, s2 = %s", n1, s2))
+            assert(n1 == i)
+            assert(s2 == string.format("hello%d", i))
+        end
+    end)
+end)
