@@ -1,6 +1,7 @@
 local dbcore = require "dbcore"
 local ldbcore = {}
 
+-- mysql 接口
 --[[
     举例:
     ldbcore.mysql_get(function(db)
@@ -67,4 +68,51 @@ function ldbcore.mysql_wrapper_res(r)
     return res
 end
 
+
+-- redis 接口
+--[[
+    ldbcore.redis_get(function(db)
+        local rds = ldbcore.redis_wrapper_query(db)
+        local cmds = {}
+        table.insert(cmds, ldbcore.redis_make_cmd("SET ? ?", "test_key", "test_value"))
+        table.insert(cmds, ldbcore.redis_make_cmd("GET ?", "test_key"))
+        local res = rds:query(cmds)
+        assert(res)
+        assert(res[1][1] and res[2][1] and res[2][2] == "test_value")
+    end)
+
+]]
+function ldbcore.redis_get(cb)
+    return dbcore.dbcore_redis_get(function (db)
+        if cb then
+            return cb(db)
+        end
+    end)
+end
+
+function ldbcore.redis_make_cmd(fmt,...)
+    local vec_argv = {}
+    local argv = {...}
+    local argc = 0
+    for w in string.gmatch(fmt, "%S+") do
+        if w == "?" then
+            argc = argc + 1
+        else
+            table.insert(vec_argv, w)
+        end
+    end
+    assert(argc == #argv)
+    for i,v in ipairs(argv) do
+        table.insert(vec_argv, tostring(v))
+    end
+    return vec_argv
+end
+
+function ldbcore.redis_wrapper_query(rds)
+    local t = {}
+    function t:query(cmds)
+        return rds:query(cmds)
+    end
+    return t
+end
 return ldbcore

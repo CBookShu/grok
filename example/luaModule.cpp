@@ -710,7 +710,6 @@ static int l_dbcore_redis_get(lua_State* L) {
 		return 1;
 	}
 	return 1;
-	return 1;
 }
 
 LUAMOD_API int luaopen_dbcore(lua_State *L)
