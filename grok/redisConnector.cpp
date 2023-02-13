@@ -37,6 +37,15 @@ int grok::redis::RedisCon::RedisCmdAppend(const char *fmt, ...)
     return ret;
 }
 
+int grok::redis::RedisCon::RedisCmdAppenArgv(int argc, const char **argv, const size_t *argvlen)
+{
+    auto* ctx = GetCtx();
+    if (!ctx) {
+        return REDIS_ERR;
+    }
+    return redisAppendCommandArgv(ctx, argc, argv, argvlen);
+}
+
 grok::redis::ReplyUPtr grok::redis::RedisCon::RedisReplay()
 {
     auto* ctx = GetCtx();

@@ -49,10 +49,26 @@ namespace grok::redis {
         ~RedisCon();
 
         int RedisCmdAppend(const char* fmt, ...);
+        int RedisCmdAppenArgv(int argc, const char **argv, const size_t *argvlen);
+
         ReplyUPtr RedisReplay();
         redisContext* GetCtx();
-    protected:
+
+    public:
+        struct GuardBad {
+            RedisCon* m_c = nullptr;
+            bool m_bad = true;
+
+            void SetOk() {m_bad = false;}
+            GuardBad(RedisCon* c):m_c(c){}
+            ~GuardBad() {
+                if (m_bad && m_c) {
+                    m_c->SetBad();
+                }
+            }
+        };
         void SetBad() {m_bad = true;}
+    protected:
         bool CheckValid();
         bool Reconnect();
     private:

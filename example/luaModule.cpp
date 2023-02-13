@@ -516,7 +516,7 @@ int luaopen_modelcore(lua_State *L)
 }
 
 static int l_dbcore_mysql_query(lua_State*L) {
-	//  p1: grok::mysql::MysqlPool::Guard*
+	//  p1: grok::mysql::MysqlClient*
 	/*	p2: table {
 			query = mysql_string,
 			callback? = 回调查询结果,
@@ -525,6 +525,7 @@ static int l_dbcore_mysql_query(lua_State*L) {
 	*/ 
 	const char* tname = typeid(grok::mysql::MysqlClient).name();
 	auto* g = (grok::mysql::MysqlClient*)luaL_checkudata(L, 1, tname);
+	luaL_argcheck(L, g != nullptr, 1, "grok::mysql::MysqlClient is nil");
 	luaL_argcheck(L, lua_istable(L, 2), 2, "param table need");
 
 	lua_getfield(L, 2, "query"); // L3 query 
@@ -607,7 +608,7 @@ static int l_dbcore_mysql_get(lua_State* L) {
 	auto guard = mgr->mysqlpool->GetByGuard();
 	grok::mysql::MysqlClient* db = guard.Get();
 	lua_pushlightuserdata(L, db);
-	// 给grok::mysql::MysqlPool::Guard*类型的userdata,安装一个元表,绑定所需要的函数
+	// 给grok::mysql::MysqlClient*类型的userdata,安装一个元表,绑定所需要的函数
 	const char* tname = typeid(grok::mysql::MysqlClient).name();
 	if (luaL_newmetatable(L, tname)) {
 		// 首次创建元表
@@ -630,10 +631,93 @@ static int l_dbcore_mysql_get(lua_State* L) {
 	return 1;
 }
 
+static int l_dbcore_redis_cmds(lua_State* L) {
+	//  p1: grok::redis::RedisCon*
+	/*	p2: table argvs = {[1] = argv,[2]=argv}
+			argv格式 = {fmt,arg1,arg2...}
+		
+		result: {res1,res2,res3,res4,res5...} or nil
+			res格式 = {[1] = true or false, [2] = redis result format[str,num,list,map...]}
+	*/ 
+	const char* tname = typeid(grok::redis::RedisCon).name();
+	auto* g = (grok::redis::RedisCon*)luaL_checkudata(L, 1, tname);
+	luaL_argcheck(L, g != nullptr, 1, "grok::redis::RedisCon is nil");
+	luaL_argcheck(L, lua_istable(L, 2), 2, "param table need");
+
+	// 使用该接口RedisCmdAppenArgv，是为了方便lua传入二进制数据，否则lua很难将%b这样的参数传入到hiredis中
+	// 增加guard 多个cmd连续调用的过程，一旦某一个错误，会导致ctx遗留老的buff,通过guard保证bad下次使用会有一个新的ctx
+	grok::redis::RedisCon::GuardBad guard(g);
+	size_t argvn = luaL_len(L, 2);
+	for (int i = 0; i < argvn; ++i) {
+		lua_pushnumber(L, i + 1);
+		lua_gettable(L, 2);
+		// one cmd table
+		if (!lua_istable(L, -1)) {
+			lua_pushboolean(L, 0);
+			return 1;
+		}
+
+		size_t argc = luaL_len(L, -1);
+		std::vector<size_t> argvlen(argc);
+		std::vector<const char*> argv(argc);
+		for (int j = 0; j < argc; ++j) {
+			lua_pushnumber(L, j + 1);
+			lua_gettable(L, -2);
+
+			size_t sz = 0;
+			const char* s = luaL_checklstring(L, -1, &sz);
+			argv.push_back(s);
+			argvlen.push_back(sz);
+
+			// pop string
+			lua_pop(L, 1);
+		}
+		// pop argv
+		lua_pop(L, 1);
+		if (REDIS_OK != g->RedisCmdAppenArgv(argc, argv.data(), argvlen.data())) {
+			lua_pushboolean(L, 0);
+			return 1;
+		}
+	}
+
+	// TODO: 解析replay
+
+	return 1;
+}
+
+static int l_dbcore_redis_get(lua_State* L) {
+	luaL_argcheck(L, lua_isfunction(L, 1), 1, "function need");
+	auto* mgr = LuaModelManager::get_instance();
+	assert(mgr);
+	auto guard = mgr->redispool->GetByGuard();
+	grok::redis::RedisCon* rds = guard.Get();
+	lua_pushlightuserdata(L, rds);
+	const char* tname = typeid(grok::redis::RedisCon).name();
+	if (luaL_newmetatable(L, tname)) {
+		lua_pushstring(L, "__index");
+		lua_pushvalue(L, -2);
+		lua_settable(L, -3);	// metatable.__index = metatable
+
+		lua_pushstring(L, "query");
+		lua_pushcfunction(L, l_dbcore_redis_cmds);
+		lua_settable(L, -3);
+	}
+	lua_setmetatable(L, -2);
+	int r = lua_pcall(L, 1, 1, 0);
+	if(r) {
+		DBG("call error:%s", lua_tostring(L, -1));
+		lua_pushnumber(L, -1);
+		return 1;
+	}
+	return 1;
+	return 1;
+}
+
 LUAMOD_API int luaopen_dbcore(lua_State *L)
 {
 	luaL_Reg reg[] = {
 		{ "dbcore_mysql_get", l_dbcore_mysql_get },
+		{ "dbcore_redis_get", l_dbcore_redis_get },
 		{ NULL, NULL },
 	};
 
