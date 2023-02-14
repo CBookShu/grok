@@ -26,6 +26,6 @@ message MsgPack {
     string dest = 2;
     string msgname = 3;
     MsgType msgtype = 4;
-    int32 sessionid = 5;
+    uint32 sessionid = 5;
     bytes pbdata = 6;
 }

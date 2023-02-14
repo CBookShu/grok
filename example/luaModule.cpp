@@ -97,6 +97,14 @@ namespace detail {
 	};
 
 	template<>
+	struct CppToLuaType<std::uint32_t> {
+		static void conver(lua_State* L, std::uint32_t& v) {
+			lua_pushnumber(L, v);
+			return ;
+		}
+	};
+
+	template<>
 	struct CppToLuaType<bool> {
 		static void conver(lua_State* L, bool v) {
 			lua_pushboolean(L, v ? 1 : 0);
@@ -238,6 +246,33 @@ namespace detail {
 		// 永远无法运行到这里
 		assert(false);
 	}
+
+	struct MsgPackWithSession {
+		grok::MsgPackSPtr msg;
+		grok::Session::Ptr session;
+
+		boost::string_view get_source() {
+			return msg->source();
+		}
+		boost::string_view get_dest() {
+			return msg->dest();
+		}
+		boost::string_view get_msgname() {
+			return msg->msgname();
+		}
+		std::int64_t get_msgtype() {
+			return msg->msgtype();
+		}
+		std::uint32_t get_sessinid() {
+			return msg->sessionid();
+		}
+		boost::string_view get_pbdata() {
+			return msg->pbdata();
+		}
+		void write_msg(const char* rspname, const char* s, size_t n) {
+			// TODO: 编写消息发送;然后绑定到消息处理处
+		}
+	};
 }	
 
 static lua_State* create_lua_scripts(const char* path);
@@ -813,6 +848,16 @@ LUAMOD_API int luaopen_dbcore(lua_State *L)
 	return 1;
 }
 
+LUAMOD_API int luaopen_msg(lua_State *L)
+{
+	luaL_Reg reg[] = {
+		{ NULL, NULL },
+	};
+
+	luaL_newlib(L, reg);
+    return 1;
+}
+
 static lua_State* create_lua_scripts(const char* path) {
 	auto*L = luaL_newstate();
 	luaL_openlibs(L);
@@ -1232,8 +1277,13 @@ void LuaModelManager::on_msg(Session::Ptr s, MsgPackSPtr p)
 		lua_settop(L, 0);
 		lua_getglobal(L, main_func);
 		luaL_checktype(L, 1, LUA_TFUNCTION);
-		lua_pushlightuserdata(L, s.get());
-		lua_pushlightuserdata(L, p.get());
+		detail::MsgPackWithSession u;
+		u.msg = p;
+		u.session = s;
+		lua_pushlightuserdata(L, &u);
+		// TODO: 给detail::MsgPackWithSession* 添加元表方法
+
+
 		if(lua_pcall(L, 2, 0, 0)) {
 			DBG("MSG OP ERROR:%s", lua_tostring(L, -1));
 			return;

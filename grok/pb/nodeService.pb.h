@@ -343,11 +343,11 @@ class MsgPack : public ::google::protobuf::Message /* @@protoc_insertion_point(c
   ::nodeService::MsgType msgtype() const;
   void set_msgtype(::nodeService::MsgType value);
 
-  // optional int32 sessionid = 5;
+  // optional uint32 sessionid = 5;
   void clear_sessionid();
   static const int kSessionidFieldNumber = 5;
-  ::google::protobuf::int32 sessionid() const;
-  void set_sessionid(::google::protobuf::int32 value);
+  ::google::protobuf::uint32 sessionid() const;
+  void set_sessionid(::google::protobuf::uint32 value);
 
   // optional bytes pbdata = 6;
   void clear_pbdata();
@@ -369,7 +369,7 @@ class MsgPack : public ::google::protobuf::Message /* @@protoc_insertion_point(c
   ::google::protobuf::internal::ArenaStringPtr dest_;
   ::google::protobuf::internal::ArenaStringPtr msgname_;
   int msgtype_;
-  ::google::protobuf::int32 sessionid_;
+  ::google::protobuf::uint32 sessionid_;
   ::google::protobuf::internal::ArenaStringPtr pbdata_;
   mutable int _cached_size_;
   friend void  protobuf_AddDesc_nodeService_2eproto();
@@ -555,15 +555,15 @@ inline void MsgPack::set_msgtype(::nodeService::MsgType value) {
   // @@protoc_insertion_point(field_set:nodeService.MsgPack.msgtype)
 }
 
-// optional int32 sessionid = 5;
+// optional uint32 sessionid = 5;
 inline void MsgPack::clear_sessionid() {
-  sessionid_ = 0;
+  sessionid_ = 0u;
 }
-inline ::google::protobuf::int32 MsgPack::sessionid() const {
+inline ::google::protobuf::uint32 MsgPack::sessionid() const {
   // @@protoc_insertion_point(field_get:nodeService.MsgPack.sessionid)
   return sessionid_;
 }
-inline void MsgPack::set_sessionid(::google::protobuf::int32 value) {
+inline void MsgPack::set_sessionid(::google::protobuf::uint32 value) {
   
   sessionid_ = value;
   // @@protoc_insertion_point(field_set:nodeService.MsgPack.sessionid)

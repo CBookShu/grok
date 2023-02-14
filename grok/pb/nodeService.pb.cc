@@ -139,7 +139,7 @@ void protobuf_AddDesc_nodeService_2eproto() {
     "\030\001 \001(\0162\037.nodeService.RegistorResultType\""
     "\202\001\n\007MsgPack\022\016\n\006source\030\001 \001(\t\022\014\n\004dest\030\002 \001("
     "\t\022\017\n\007msgname\030\003 \001(\t\022%\n\007msgtype\030\004 \001(\0162\024.no"
-    "deService.MsgType\022\021\n\tsessionid\030\005 \001(\005\022\016\n\006"
+    "deService.MsgType\022\021\n\tsessionid\030\005 \001(\r\022\016\n\006"
     "pbdata\030\006 \001(\014*>\n\022RegistorResultType\022\020\n\014eR"
     "egister_OK\020\000\022\026\n\022eRegister_ParamErr\020\001*N\n\007"
     "MsgType\022\r\n\teMsg_none\020\000\022\020\n\014eMsg_request\020\001"
@@ -651,7 +651,7 @@ void MsgPack::SharedCtor() {
   dest_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   msgname_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   msgtype_ = 0;
-  sessionid_ = 0;
+  sessionid_ = 0u;
   pbdata_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
 
@@ -799,12 +799,12 @@ bool MsgPack::MergePartialFromCodedStream(
         break;
       }
 
-      // optional int32 sessionid = 5;
+      // optional uint32 sessionid = 5;
       case 5: {
         if (tag == 40) {
          parse_sessionid:
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
                  input, &sessionid_)));
 
         } else {
@@ -887,9 +887,9 @@ void MsgPack::SerializeWithCachedSizes(
       4, this->msgtype(), output);
   }
 
-  // optional int32 sessionid = 5;
+  // optional uint32 sessionid = 5;
   if (this->sessionid() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteInt32(5, this->sessionid(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteUInt32(5, this->sessionid(), output);
   }
 
   // optional bytes pbdata = 6;
@@ -943,9 +943,9 @@ void MsgPack::SerializeWithCachedSizes(
       4, this->msgtype(), target);
   }
 
-  // optional int32 sessionid = 5;
+  // optional uint32 sessionid = 5;
   if (this->sessionid() != 0) {
-    target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(5, this->sessionid(), target);
+    target = ::google::protobuf::internal::WireFormatLite::WriteUInt32ToArray(5, this->sessionid(), target);
   }
 
   // optional bytes pbdata = 6;
@@ -990,10 +990,10 @@ int MsgPack::ByteSize() const {
       ::google::protobuf::internal::WireFormatLite::EnumSize(this->msgtype());
   }
 
-  // optional int32 sessionid = 5;
+  // optional uint32 sessionid = 5;
   if (this->sessionid() != 0) {
     total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::Int32Size(
+      ::google::protobuf::internal::WireFormatLite::UInt32Size(
         this->sessionid());
   }
 
@@ -1247,15 +1247,15 @@ void MsgPack::clear_msgtype() {
   // @@protoc_insertion_point(field_set:nodeService.MsgPack.msgtype)
 }
 
-// optional int32 sessionid = 5;
+// optional uint32 sessionid = 5;
 void MsgPack::clear_sessionid() {
-  sessionid_ = 0;
+  sessionid_ = 0u;
 }
- ::google::protobuf::int32 MsgPack::sessionid() const {
+ ::google::protobuf::uint32 MsgPack::sessionid() const {
   // @@protoc_insertion_point(field_get:nodeService.MsgPack.sessionid)
   return sessionid_;
 }
- void MsgPack::set_sessionid(::google::protobuf::int32 value) {
+ void MsgPack::set_sessionid(::google::protobuf::uint32 value) {
   
   sessionid_ = value;
   // @@protoc_insertion_point(field_set:nodeService.MsgPack.sessionid)

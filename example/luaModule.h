@@ -133,4 +133,7 @@ LUAMOD_API int luaopen_modelcore(lua_State* L);
 
 // 绑定db接口
 LUAMOD_API int luaopen_dbcore(lua_State* L);
+
+// 绑定msg接口
+LUAMOD_API int luaopen_msg(lua_State* L);
 }
