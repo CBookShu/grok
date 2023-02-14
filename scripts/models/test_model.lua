@@ -94,3 +94,62 @@ ldbcore.mysql_get(function (db)
         end
     end)
 end)
+
+local function dbg(t)
+    local dbg_s = debug_table(t)
+    lcore.logtrace(dbg_s)
+end
+
+local rds_rpl_t = ldbcore.rdis_status
+ldbcore.redis_get(function (db)
+    local rds = ldbcore.redis_wrapper_query(db)
+    local res = rds:query("SELECT ?", 1)
+    assert(res and res[1][1] ~= rds_rpl_t.type_rpl_err and res[1][1] ~= rds_rpl_t.type_rpl_ctxerr)
+    assert(res[1][1] == rds_rpl_t.type_rpl_status)
+    assert(res[1][2] == "OK")
+
+    rds:appendcmd("SET ? ?", "test_key", "test_value")
+    rds:appendcmd("GET ?", "test_key")
+    res = rds:query()
+    assert(res)
+    assert(res[1][1] == 5 and res[1][2] == "OK")
+    assert(res[2][1] == 1 and res[2][2] == "test_value")
+
+    local fmt = string.format
+
+    -- cmds 单个结果
+    res = rds:query("DEL hash_key")
+    assert(res and res[1][1] == rds_rpl_t.type_rpl_int)
+    local count = 100
+    for i = 1, count do
+        rds:appendcmd("HSET hash_key ? ?", fmt("f%d", i), fmt("v%d", i))
+    end
+    res = rds:query()
+    assert(res)
+    for i = 1, count do
+        assert(res[i][1] == rds_rpl_t.type_rpl_int and res[1][2] == 1)
+    end
+    for i = 1, count do
+        rds:appendcmd("HGET hash_key ?", fmt("f%d",i))
+    end
+    res = rds:query()
+    assert(res)
+    for i = 1, count do
+        assert(res[i][1] == rds_rpl_t.type_rpl_str and res[i][2] == fmt("v%d",i))
+    end
+
+    -- 多个array结果
+    local ar = {}
+    table.insert(ar, "HMGET hash_key")
+    for i = 1, count do
+        table.insert(ar, fmt("f%d",i))
+    end
+    local cmd = table.concat(ar, " ")
+    lcore.logtrace("cmd:%s", cmd)
+    res = rds:query(cmd)
+    assert(res and res[1][1] == rds_rpl_t.type_rpl_array)
+    assert(#res[1][2] == count)
+    for i = 1, count do
+        assert(res[1][2][i] == fmt("v%d",i))
+    end
+end)

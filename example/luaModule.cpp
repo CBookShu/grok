@@ -158,6 +158,39 @@ namespace detail {
 		lua_settable(L, -3);
 	}
 
+	void Helper_Parse_RDS_REPLAY_ELEMENT(lua_State* L, redisReply* rpl) {
+		// top: res = {}
+		assert(rpl);	// 永远不应该是空
+		if(rpl->type == REDIS_REPLY_STRING
+		|| rpl->type == REDIS_REPLY_STATUS
+		|| rpl->type == REDIS_REPLY_ERROR) {
+			lua_pushlstring(L, rpl->str, rpl->len);
+			return;
+		}
+
+		if(rpl->type == REDIS_REPLY_NIL) {
+			// nil 就不做设置了
+			lua_pushnil(L);
+			return;
+		}
+
+		if(rpl->type == REDIS_REPLY_INTEGER) {
+			lua_pushinteger(L, rpl->integer);
+			return;
+		}
+
+		if(rpl->type == REDIS_REPLY_ARRAY) {
+			lua_newtable(L);		// local child_rpls = {}
+			for (int i = 0; i < rpl->elements; ++i) {
+				Helper_Parse_RDS_REPLAY_ELEMENT(L, rpl->element[i]);
+				lua_seti(L, -2, i + 1);
+			}
+			return;
+		}
+		// 永远无法运行到这里
+		assert(false);
+	}
+
 	void Helper_Parse_RDS_REPLAY(lua_State* L, redisReply* rpl) {
 		// top: res = {}
 		if (!rpl) {
@@ -182,7 +215,7 @@ namespace detail {
 			return;
 		}
 
-		if(rpl->type == REDIS_REPLY_INTEGER) {
+		if(rpl->type == REDIS_REPLY_NIL) {
 			// nil 就不做设置了
 			return;
 		}
@@ -196,7 +229,8 @@ namespace detail {
 		if(rpl->type == REDIS_REPLY_ARRAY) {
 			lua_newtable(L);		// local child_rpls = {}
 			for (int i = 0; i < rpl->elements; ++i) {
-				Helper_Parse_RDS_REPLAY(L, rpl->element[i]);
+				Helper_Parse_RDS_REPLAY_ELEMENT(L, rpl->element[i]);
+				lua_seti(L, -2, i + 1);// child_rpls[i+1] = value
 			}
 			lua_seti(L, -2, 2); // res[2] = child_rpls
 			return;
