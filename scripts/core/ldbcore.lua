@@ -1,6 +1,24 @@
 local dbcore = require "dbcore"
 local ldbcore = {}
 
+--[[
+#define REDIS_REPLY_STRING 1
+#define REDIS_REPLY_ARRAY 2
+#define REDIS_REPLY_INTEGER 3
+#define REDIS_REPLY_NIL 4
+#define REDIS_REPLY_STATUS 5
+#define REDIS_REPLY_ERROR 6
+]]
+ldbcore.rdis_status = {
+    type_rpl_ctxerr = 0,
+    type_rpl_str = 1,
+    type_rpl_array = 2,
+    type_rpl_int = 3,
+    type_rpl_nil = 4,
+    type_rpl_status = 5,
+    type_rpl_err = 6,
+}
+
 -- mysql 接口
 --[[
     举例:
@@ -78,7 +96,7 @@ end
         table.insert(cmds, ldbcore.redis_make_cmd("GET ?", "test_key"))
         local res = rds:query(cmds)
         assert(res)
-        assert(res[1][1] and res[2][1] and res[2][2] == "test_value")
+        assert(res[1][1] == ldbcore.rdis_status.type_rpl_str and res[2][2] == "test_value")
     end)
 
 ]]
@@ -108,10 +126,22 @@ function ldbcore.redis_make_cmd(fmt,...)
     return vec_argv
 end
 
-function ldbcore.redis_wrapper_query(rds)
+function ldbcore.redis_wrapper_query(db)
     local t = {}
-    function t:query(cmds)
-        return rds:query(cmds)
+    local cmds = {}
+    function t:appendcmd(fmt,...)
+        local cmd = ldbcore.redis_make_cmd(fmt, ...)
+        table.insert(cmds, cmd)
+    end
+    function t:query(fmt,...)
+        if fmt then 
+            local cmd = ldbcore.redis_make_cmd(fmt, ...)
+            table.insert(cmds, cmd)
+    end
+        local len = #cmds
+        local res = db:query(cmds)
+        cmds = {}
+        return res
     end
     return t
 end

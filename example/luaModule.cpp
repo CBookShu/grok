@@ -157,6 +157,53 @@ namespace detail {
 		lua_pushcclosure(L, cpp_func_call_by_lua_void<O,Args...>, 1);
 		lua_settable(L, -3);
 	}
+
+	void Helper_Parse_RDS_REPLAY(lua_State* L, redisReply* rpl) {
+		// top: res = {}
+		if (!rpl) {
+			// res = {[1] = 0}
+			lua_pushinteger(L, 0);
+			lua_seti(L, -2, 1); 
+			return;
+		}
+// #define REDIS_REPLY_STRING 1
+// #define REDIS_REPLY_ARRAY 2
+// #define REDIS_REPLY_INTEGER 3
+// #define REDIS_REPLY_NIL 4
+// #define REDIS_REPLY_STATUS 5
+// #define REDIS_REPLY_ERROR 6
+		lua_pushinteger(L, rpl->type);
+		lua_seti(L, -2, 1);	// res[1] = rpl->type
+		if(rpl->type == REDIS_REPLY_STRING
+		|| rpl->type == REDIS_REPLY_STATUS
+		|| rpl->type == REDIS_REPLY_ERROR) {
+			lua_pushlstring(L, rpl->str, rpl->len);
+			lua_seti(L, -2, 2);	// res[2] = string(rpl->str,rpl->len)
+			return;
+		}
+
+		if(rpl->type == REDIS_REPLY_INTEGER) {
+			// nil 就不做设置了
+			return;
+		}
+
+		if(rpl->type == REDIS_REPLY_INTEGER) {
+			lua_pushinteger(L, rpl->integer);
+			lua_seti(L, -2, 2); // res[2] = rpl->integer
+			return;
+		}
+
+		if(rpl->type == REDIS_REPLY_ARRAY) {
+			lua_newtable(L);		// local child_rpls = {}
+			for (int i = 0; i < rpl->elements; ++i) {
+				Helper_Parse_RDS_REPLAY(L, rpl->element[i]);
+			}
+			lua_seti(L, -2, 2); // res[2] = child_rpls
+			return;
+		}
+		// 永远无法运行到这里
+		assert(false);
+	}
 }	
 
 static lua_State* create_lua_scripts(const char* path);
@@ -637,7 +684,7 @@ static int l_dbcore_redis_cmds(lua_State* L) {
 			argv格式 = {fmt,arg1,arg2...}
 		
 		result: {res1,res2,res3,res4,res5...} or nil
-			res格式 = {[1] = true or false, [2] = redis result format[str,num,list,map...]}
+			res格式 = {[1] = status, [2] = redis result format[str,num,list,map...]}
 	*/ 
 	const char* tname = typeid(grok::redis::RedisCon).name();
 	auto* g = (grok::redis::RedisCon*)luaL_checkudata(L, 1, tname);
@@ -649,11 +696,10 @@ static int l_dbcore_redis_cmds(lua_State* L) {
 	grok::redis::RedisCon::GuardBad guard(g);
 	size_t argvn = luaL_len(L, 2);
 	for (int i = 0; i < argvn; ++i) {
-		lua_pushnumber(L, i + 1);
-		lua_gettable(L, 2);
+		lua_geti(L, 2, i + 1);
 		// one cmd table
 		if (!lua_istable(L, -1)) {
-			lua_pushboolean(L, 0);
+			lua_pushnil(L);
 			return 1;
 		}
 
@@ -661,13 +707,12 @@ static int l_dbcore_redis_cmds(lua_State* L) {
 		std::vector<size_t> argvlen(argc);
 		std::vector<const char*> argv(argc);
 		for (int j = 0; j < argc; ++j) {
-			lua_pushnumber(L, j + 1);
-			lua_gettable(L, -2);
+			lua_geti(L, -1, j + 1);
 
 			size_t sz = 0;
 			const char* s = luaL_checklstring(L, -1, &sz);
-			argv.push_back(s);
-			argvlen.push_back(sz);
+			argv[j] = s;
+			argvlen[j] = sz;
 
 			// pop string
 			lua_pop(L, 1);
@@ -675,13 +720,23 @@ static int l_dbcore_redis_cmds(lua_State* L) {
 		// pop argv
 		lua_pop(L, 1);
 		if (REDIS_OK != g->RedisCmdAppenArgv(argc, argv.data(), argvlen.data())) {
-			lua_pushboolean(L, 0);
+			lua_pushnil(L);
 			return 1;
 		}
 	}
 
 	// TODO: 解析replay
+	lua_newtable(L);	// result = {}
+	for (int i = 0; i < argvn; ++i) {
+		lua_newtable(L);	// local res = {}
+		auto rpl = g->RedisReplay();	// 返回值
+		if (rpl) {
+			guard.SetOk();
+		} 
 
+		detail::Helper_Parse_RDS_REPLAY(L, rpl.get());
+		lua_seti(L, -2, i + 1);	// // result[i+1] = res
+	}
 	return 1;
 }
 
