@@ -49,6 +49,20 @@ namespace detail {
 		}
 	};
 
+	template<>
+	struct LuaToCppType<std::int64_t> {
+		static std::int64_t conver(lua_State* L, int i) {
+			return luaL_checkinteger(L, i);
+		}
+	};
+
+	template<>
+	struct LuaToCppType<size_t> {
+		static size_t conver(lua_State* L, int i) {
+			return luaL_checkinteger(L, i);
+		}
+	};
+
 	template <typename T>
 	struct CppToLuaType;
 
@@ -98,7 +112,15 @@ namespace detail {
 
 	template<>
 	struct CppToLuaType<std::uint32_t> {
-		static void conver(lua_State* L, std::uint32_t& v) {
+		static void conver(lua_State* L, std::uint32_t v) {
+			lua_pushnumber(L, v);
+			return ;
+		}
+	};
+
+	template<>
+	struct CppToLuaType<std::int64_t> {
+		static void conver(lua_State* L, std::int64_t v) {
 			lua_pushnumber(L, v);
 			return ;
 		}
@@ -118,51 +140,115 @@ namespace detail {
 		return ((*o).*func)(LuaToCppType<Args>::conver(L, 1 + I)...);
 	}
 
-	template<typename O, typename R, typename ...Args>
-	int cpp_func_call_by_lua(lua_State* L) {
-		const char* tname = typeid(O).name();
-		O* o = (O*)luaL_checkudata(L, 1, tname);
-		luaL_argcheck(L, o != nullptr, 1, tname);
-		auto func = *(R(O::**)(Args...)) lua_touserdata(L, lua_upvalueindex(1));
-		CppToLuaType<R>::conver(L, cpp_func_call_by_lua_helper_var_t<O,R,Args...>(L, o, func,typename MakeIs<sizeof...(Args)>::Type()));
-		return 1;
-	}
+	template <typename O, typename R, typename ...Args>
+	struct Functiontor_R  {
+		using F = R(O::*)(Args...);
+		F func;
 
-	template<typename O, typename ...Args>
-	int cpp_func_call_by_lua_void(lua_State* L) {
-		const char* tname = typeid(O).name();
-		O* o = (O*)luaL_checkudata(L, 1, tname);
-		luaL_argcheck(L, o != nullptr, 1, tname);
-		auto func = *(void(O::**)(Args...)) lua_touserdata(L, lua_upvalueindex(1));
-		cpp_func_call_by_lua_helper_var_t<O,void,Args...>(L, o, func,typename  MakeIs<sizeof...(Args)>::Type());
-		return 0;
-	}
+		~Functiontor_R() {
+			DBG("~Functiontor_R:%s", typeid(*this).name());
+		}
 
-	// template <typename F>
-	// static int Helper_Bind_Cpp_Func(lua_State* L, const char* fname, F f) {
-	// 	using FuncTrait = FunctionTrait<F>;
-	// 	if constexpr (std::is_void<FuncTrait::RType>::value) {
+		virtual int call(lua_State* L) {
+			const char* tname = typeid(O).name();
+			O* o = (O*)luaL_checkudata(L, 1, tname);
+			luaL_argcheck(L, o != nullptr, 1, tname);
 
-	// 	} else {
+			CppToLuaType<R>::conver(L, cpp_func_call_by_lua_helper_var_t<O,R,Args...>(L, o, func,typename MakeIs<sizeof...(Args)>::Type()));
+			return 1;
+		}
 
-	// 	}
-	// }
+		static int l_call(lua_State* L) {
+			const char *tname = typeid(Functiontor_R).name();
+			Functiontor_R* functor = *(Functiontor_R**)luaL_checkudata(L, lua_upvalueindex(1), tname);
+			luaL_argcheck(L, functor, -1, tname);
+
+			return functor->call(L);
+		}
+
+		static int l_gc(lua_State* L) {
+			Functiontor_R* o = *(Functiontor_R**)lua_touserdata(L, 1);
+			delete o;
+		}
+	};
+
+	template <typename O,  typename ...Args>
+	struct Functiontor_void  {
+		using F = void(O::*)(Args...);
+		F func;
+		~Functiontor_void() {
+			DBG("~Functiontor_void:%s", typeid(*this).name());
+		}
+
+		virtual int call(lua_State* L) {
+			const char* tname = typeid(O).name();
+			O* o = (O*)luaL_checkudata(L, 1, tname);
+			luaL_argcheck(L, o != nullptr, 1, tname);
+
+			cpp_func_call_by_lua_helper_var_t<O,void,Args...>(L, o, func,typename MakeIs<sizeof...(Args)>::Type());
+			return 0;
+		}
+
+		static int l_call(lua_State* L) {
+			const char *tname = typeid(Functiontor_void).name();
+			Functiontor_void* functor = *(Functiontor_void**)luaL_checkudata(L, lua_upvalueindex(1), tname);
+			luaL_argcheck(L, functor, -1, tname);
+
+			return functor->call(L);
+		}
+
+		static int l_gc(lua_State* L) {
+			Functiontor_void* o = *(Functiontor_void**)lua_touserdata(L, 1);
+			delete o;
+		}
+	};
+
 
 	template <typename O, typename R, typename ...Args>
-	static void Helper_Bind_Cpp_Func(lua_State* L, const char* fname, R(O::*func)(Args...), char* mem) {
+	static void Helper_Bind_Cpp_Func(lua_State* L, const char* fname, R(O::*func)(Args...)) {
+		using Functiontor_R_t = Functiontor_R<O,R,Args...>;
+
 		lua_pushstring(L, fname);
-		new(mem) (R(O::*)(Args...)) (func);
-		lua_pushlightuserdata(L, mem);
-		lua_pushcclosure(L, cpp_func_call_by_lua<O,R,Args...>, 1);
+		void* ud = lua_newuserdata(L, sizeof(Functiontor_R_t));
+		Functiontor_R_t* functor = new Functiontor_R_t;
+		functor->func = func;
+		*(Functiontor_R_t**)ud = functor;
+		if (luaL_newmetatable(L, typeid(Functiontor_R_t).name())) {
+			lua_pushvalue(L, -1);
+			lua_pushstring(L, "__index");
+			lua_settable(L, -3);
+
+			lua_pushstring(L, "__gc");
+			lua_pushcclosure(L, Functiontor_R_t::l_gc, 0);
+			lua_settable(L, -3);
+		}
+		lua_setmetatable(L, -2);
+
+		lua_pushcclosure(L, Functiontor_R_t::l_call, 1);
 		lua_settable(L, -3);
 	}
 
 	template <typename O, typename ...Args>
-	static void Helper_Bind_Cpp_Func(lua_State* L, const char* fname, void(O::*func)(Args...),char* mem) {
+	static void Helper_Bind_Cpp_Func(lua_State* L, const char* fname, void(O::*func)(Args...)) {
+		using Functiontor_void_t = Functiontor_void<O,Args...>;
+
 		lua_pushstring(L, fname);
-		new(mem) (void(O::*)(Args...)) (func);
-		lua_pushlightuserdata(L, mem);
-		lua_pushcclosure(L, cpp_func_call_by_lua_void<O,Args...>, 1);
+		void* ud = lua_newuserdata(L, sizeof(Functiontor_void_t));
+		Functiontor_void_t* functor = new Functiontor_void_t;
+		functor->func = func;
+		*(Functiontor_void_t**)ud = functor;
+		if (luaL_newmetatable(L, typeid(Functiontor_void_t).name())) {
+			lua_pushvalue(L, -1);
+			lua_pushstring(L, "__index");
+			lua_settable(L, -3);
+
+			lua_pushstring(L, "__gc");
+			lua_pushcclosure(L, Functiontor_void_t::l_gc, 0);
+			lua_settable(L, -3);
+		}
+		lua_setmetatable(L, -2);
+
+		lua_pushcclosure(L, Functiontor_void_t::l_call, 1);
 		lua_settable(L, -3);
 	}
 
@@ -263,14 +349,29 @@ namespace detail {
 		std::int64_t get_msgtype() {
 			return msg->msgtype();
 		}
-		std::uint32_t get_sessinid() {
+		std::uint32_t get_sessionid() {
 			return msg->sessionid();
 		}
 		boost::string_view get_pbdata() {
 			return msg->pbdata();
 		}
-		void write_msg(const char* rspname, const char* s, size_t n) {
-			// TODO: 编写消息发送;然后绑定到消息处理处
+		void write_msg(const char* source,const char*dest,const char*msgname,std::int64_t type,const char *data,size_t len) {
+			nodeService::MsgPack msgpack;
+			msgpack.set_source(source);
+			msgpack.set_dest(dest);
+			msgpack.set_msgname(msgname);
+			if (type >= nodeService::eMsg_none && type <= nodeService::eMsg_notify) {
+				msgpack.set_msgtype(nodeService::MsgType(type));
+			} else {
+				msgpack.set_msgtype(nodeService::MsgType::eMsg_none);
+			}
+			msgpack.set_sessionid(msg->sessionid());
+			msgpack.mutable_pbdata()->assign(data, len);
+
+			std::string s;
+			if (msgpack.SerializeToString(&s)) {
+				session->write(s.data(), s.size());
+			}
 		}
 	};
 }	
@@ -693,20 +794,16 @@ static int l_dbcore_mysql_query(lua_State*L) {
 		lua_settable(L, -3);	// metatable.__index = metatable
 
 		using Records = grok::mysql::Records;
-		static char t_func_next_mem[sizeof(&Records::Next)];
-		detail::Helper_Bind_Cpp_Func(L, "next", &Records::Next, t_func_next_mem);
+		detail::Helper_Bind_Cpp_Func(L, "next", &Records::Next);
 
 		using t_func_is_null = bool (Records::*)(const char*);
-		static char t_func_is_null_mem[sizeof((t_func_is_null)&Records::IsNull)];
-		detail::Helper_Bind_Cpp_Func(L, "is_null", (t_func_is_null)&Records::IsNull, t_func_is_null_mem);
+		detail::Helper_Bind_Cpp_Func(L, "is_null", (t_func_is_null)&Records::IsNull);
 
 		using t_func_get_string = boost::string_view (Records::*)(const char*);
-		static char t_func_get_string_mem[sizeof((t_func_get_string)&Records::GetString)];
-		detail::Helper_Bind_Cpp_Func(L, "get_string", (t_func_get_string)&Records::GetString, t_func_get_string_mem);
+		detail::Helper_Bind_Cpp_Func(L, "get_string", (t_func_get_string)&Records::GetString);
 
 		using t_func_get_blob = boost::string_view (Records::*)(const char*);
-		static char t_func_get_blob_mem[sizeof((t_func_get_blob)&Records::GetBlob)];
-		detail::Helper_Bind_Cpp_Func(L, "get_blob", (t_func_get_blob)&Records::GetBlob, t_func_get_blob_mem);
+		detail::Helper_Bind_Cpp_Func(L, "get_blob", (t_func_get_blob)&Records::GetBlob);
 	}
 	lua_setmetatable(L, -2);
 	int r = lua_pcall(L, 1, 1, 0);
@@ -848,9 +945,15 @@ LUAMOD_API int luaopen_dbcore(lua_State *L)
 	return 1;
 }
 
-LUAMOD_API int luaopen_msg(lua_State *L)
+static int l_msgcore_simulator(lua_State* L) {
+	// TODO: 需要这个么?
+	return 0;
+}
+
+LUAMOD_API int luaopen_msgcore(lua_State *L)
 {
 	luaL_Reg reg[] = {
+		{ "msgcore_simulator", l_msgcore_simulator },
 		{ NULL, NULL },
 	};
 
@@ -1196,10 +1299,10 @@ void LuaModelManager::init(int argc, char** argv)
 	rdsconfig.url = "localhost";
 	rdsconfig.port = 6379;
 	redispool = redis::RedisConPool::Create(dbcon, rdsconfig);
-	// if(!redispool->GetByGuard()->GetCtx()) {
-	// 	DBG("redis con error");
-	// 	exit(1);
-	// }
+	if(!redispool->GetByGuard()->GetCtx()) {
+		DBG("redis con error");
+		exit(1);
+	}
 
 	// 先创建消息分发
 	msgcenter = MsgCenter::Create();
@@ -1237,11 +1340,8 @@ void LuaModelManager::uninit()
 	}
 	for(auto& it:models) {
 		del_luamodel(it->name.c_str());
-		model_stop(it);
+		model_stop_force(it);
 	}
-
-	// 停止主循环
-	ios.stop();
 
 	// 
 	mysqlpool.reset();
@@ -1277,14 +1377,27 @@ void LuaModelManager::on_msg(Session::Ptr s, MsgPackSPtr p)
 		lua_settop(L, 0);
 		lua_getglobal(L, main_func);
 		luaL_checktype(L, 1, LUA_TFUNCTION);
+		
 		detail::MsgPackWithSession u;
 		u.msg = p;
 		u.session = s;
 		lua_pushlightuserdata(L, &u);
-		// TODO: 给detail::MsgPackWithSession* 添加元表方法
+		
+		const char* tname = typeid(detail::MsgPackWithSession).name();
+		if(luaL_newmetatable(L, tname)) {
+			lua_pushvalue(L, -1);
+			lua_setfield(L, -2, "__index");
 
-
-		if(lua_pcall(L, 2, 0, 0)) {
+			detail::Helper_Bind_Cpp_Func(L, "get_source", &detail::MsgPackWithSession::get_source);
+			detail::Helper_Bind_Cpp_Func(L, "get_dest", &detail::MsgPackWithSession::get_dest);
+			detail::Helper_Bind_Cpp_Func(L, "get_msgname", &detail::MsgPackWithSession::get_msgname);
+			detail::Helper_Bind_Cpp_Func(L, "get_msgtype", &detail::MsgPackWithSession::get_msgtype);
+			detail::Helper_Bind_Cpp_Func(L, "get_sessionid", &detail::MsgPackWithSession::get_sessionid);
+			detail::Helper_Bind_Cpp_Func(L, "get_pbdata", &detail::MsgPackWithSession::get_pbdata);
+			detail::Helper_Bind_Cpp_Func(L, "write_msg", &detail::MsgPackWithSession::write_msg);
+		}
+		lua_setmetatable(L, -2);
+		if(lua_pcall(L, 1, 0, 0)) {
 			DBG("MSG OP ERROR:%s", lua_tostring(L, -1));
 			return;
 		}
@@ -1348,6 +1461,14 @@ void LuaModelManager::model_stop(LuaModel::SPtr m)
 			self->L = nullptr;
 		}
 	});
+}
+
+void LuaModelManager::model_stop_force(LuaModel::SPtr m)
+{
+	if (m->L) {
+		lua_close(m->L);
+		m->L = nullptr;
+	}
 }
 
 int LuaModelManager::invoke_lua_callback(lua_State *L, lua_Number cbid)

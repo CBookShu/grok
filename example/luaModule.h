@@ -117,6 +117,7 @@ struct LuaModelManager : public grok::WorkStaff {
     LuaModel::SPtr del_luamodel(const char* name);
     LuaModel::SPtr get_luamodel(const char* name);
     void model_stop(LuaModel::SPtr m);
+    void model_stop_force(LuaModel::SPtr m);
     int invoke_lua_callback(lua_State* L, lua_Number cbid);
 };
 
@@ -135,5 +136,5 @@ LUAMOD_API int luaopen_modelcore(lua_State* L);
 LUAMOD_API int luaopen_dbcore(lua_State* L);
 
 // 绑定msg接口
-LUAMOD_API int luaopen_msg(lua_State* L);
+LUAMOD_API int luaopen_msgcore(lua_State* L);
 }
