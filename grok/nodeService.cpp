@@ -35,12 +35,11 @@ struct MsgPackHelper {
 };
 
 struct MsgPackOperatorRun : GrokRunable {
-    Session::Ptr client;
     MsgCenter::MsgOpCall cb;
     MsgPackSPtr pack;
 
     virtual void run() override {
-        cb(client, pack);
+        cb(pack);
     }
 };
 
@@ -57,6 +56,60 @@ grok::NodeCenter::SPtr grok::NodeCenter::Create(boost::asio::io_service& iov, in
 
     sptr->m_net_server->start(port, t);
     return sptr;
+}
+
+std::uint32_t grok::NodeCenter::msg_msgnextidx()
+{
+    return m_req_sessionidx.fetch_add(1);
+}
+
+void grok::NodeCenter::write_msgpack(MsgPackSPtr p)
+{
+    if (p->msgtype() == nodeService::eMsg_response) {
+        if (p->source() == gNodeCenterName) {
+            // 返回给自己的消息
+            auto self = this->shared_from_this();
+            m_net_server->iosvr_rnd().dispatch([p, self, this](){
+                evMsgCome(p);
+            });
+            return;
+        }
+        auto session = get_session(p->source());
+        if (!session) {
+            DBG("session:%s miss", p->source().c_str());
+            return;
+        }
+        MsgPackHelper::Send(session, p.get());
+        return;
+    }
+
+    if(p->dest() == gNodeCenterName) {
+        // 自己给自己发消息
+        auto self = this->shared_from_this();
+        m_net_server->iosvr_rnd().dispatch([p, self, this](){
+            evMsgCome(p);
+        });
+        return;
+    }
+
+    auto session = get_session(p->dest());
+    if (!session) {
+        DBG("session:%s miss", p->dest().c_str());
+        return;
+    }
+    MsgPackHelper::Send(session, p.get());
+}
+
+void grok::NodeCenter::write_msg(const char *msgname, const char *dest, const char *data, std::size_t n, nodeService::MsgType type, std::uint32_t id)
+{
+    auto p = std::make_shared<nodeService::MsgPack>();
+    p->set_dest(dest);
+    p->set_msgname(msgname);
+    p->mutable_pbdata()->assign(data, n);
+    p->set_msgtype(type);
+    p->set_sessionid(id);
+    p->set_source(gNodeCenterName);
+    write_msgpack(p);
 }
 
 void grok::NodeCenter::on_newsession(Session::Ptr s)
@@ -181,7 +234,7 @@ void grok::NodeCenter::on_nodemsg(MsgPackSPtr p, Session::Ptr s)
             return;
         }
         // 分发处理
-        evMsgCome(source_s, p);
+        evMsgCome(p);
         return;
     }
 
@@ -227,53 +280,26 @@ Session::Ptr grok::NodeClient::get_session()
     return m_ctx.s;
 }
 
-void grok::NodeClient::send_notify(std::string msgname, const std::string &dest, const char *data, std::size_t n)
+void grok::NodeClient::write_msgpack(MsgPackSPtr p)
 {
-    std::shared_ptr<nodeService::MsgPack> p = std::make_shared<nodeService::MsgPack>();
-    p->set_dest(dest);
-    p->mutable_pbdata()->append(data, n);
-    p->set_msgname(msgname);
-    p->set_msgtype(nodeService::eMsg_notify);
-    //TODO: 当lambda支持move uniqeptr时可以修改,可以把shared_ptr改成uniqe_ptr
-
     auto self = this->shared_from_this();
     dispatch([p, self, this](){
-        p->set_source(m_ctx.name);
         MsgPackHelper::Send(m_ctx.s, p.get());
     });
 }
 
-void grok::NodeClient::send_request(std::string msgname, const std::string &dest, const char *data, std::size_t n)
+void grok::NodeClient::write_msg(const char *msgname, const char *dest, const char *data, std::size_t n, nodeService::MsgType type, std::uint32_t id)
 {
-    std::shared_ptr<nodeService::MsgPack> p = std::make_shared<nodeService::MsgPack>();
+    auto p = std::make_shared<nodeService::MsgPack>();
     p->set_dest(dest);
-    p->mutable_pbdata()->append(data, n);
     p->set_msgname(msgname);
-    p->set_msgtype(nodeService::eMsg_request);
-    p->set_sessionid(msg_msgnextidx());
-    //TODO: 当lambda支持move uniqeptr时可以修改,可以把shared_ptr改成uniqe_ptr
-
+    p->mutable_pbdata()->assign(data, n);
+    p->set_msgtype(type);
+    p->set_sessionid(id);
     auto self = shared_from_this();
     dispatch([p, self, this](){
         p->set_source(m_ctx.name);
         MsgPackHelper::Send(m_ctx.s, p.get());
-    });
-}
-
-void grok::NodeClient::send_response(nodeService::MsgPack *p, const char *data, std::size_t n)
-{
-    std::shared_ptr<nodeService::MsgPack> p_rsp = std::make_shared<nodeService::MsgPack>();
-    p_rsp->set_msgname(p->msgname());
-    p_rsp->set_dest(p->dest());
-    p_rsp->set_source(p->source());
-    p_rsp->set_msgtype(nodeService::eMsg_response);
-    p_rsp->set_sessionid(p->sessionid());
-    p_rsp->mutable_pbdata()->assign(data, n);
-    //TODO: 当lambda支持move uniqeptr时可以修改,可以把shared_ptr改成uniqe_ptr
-
-    auto self = shared_from_this();
-    dispatch([p_rsp, self, this](){
-        MsgPackHelper::Send(m_ctx.s, p_rsp.get());
     });
 }
 
@@ -286,7 +312,7 @@ void grok::NodeClient::on_puremsg(Session::Ptr s, const char *d, std::size_t n)
         return ;
     }
 
-    evMsgCome(m_ctx.s, pack);
+    evMsgCome(pack);
 }
 
 std::uint32_t grok::NodeClient::msg_msgnextidx()
@@ -331,13 +357,13 @@ void grok::MsgCenter::post(GrokRunable *run)
     m_op_lists.Give(run);
 }
 
-void grok::MsgCenter::register_msg(std::string msgname, MsgOpCall &&cb)
+void grok::MsgCenter::register_msg(const std::string& msgname, MsgOpCall &&cb)
 {
     auto w = m_data.writeGuard();
     w->msg2calls[msgname] = std::move(cb);
 }
 
-void grok::MsgCenter::msg_operator(Session::Ptr s, MsgPackSPtr p)
+void grok::MsgCenter::msg_operator(MsgPackSPtr p)
 {
     MsgOpCall cb;
     {
@@ -350,7 +376,6 @@ void grok::MsgCenter::msg_operator(Session::Ptr s, MsgPackSPtr p)
     if(cb) {
         auto* run = new MsgPackOperatorRun;
         run->cb = cb;
-        run->client = s;
         run->pack = p;
         m_op_lists.Give(run);
     }

@@ -30,36 +30,40 @@ public:
 };
 
 int main(int argc, char** argv) {
-    auto msgcenter = grok::MsgCenter::Create();
-
     asio::io_service iov;
     const char* ip = "127.0.0.1";
     int port = 9595;
     auto center = grok::NodeCenter::Create(iov, port);
-    center->evMsgCome += delegate(msgcenter, &MsgCenter::msg_operator);
-
     TestPb test;
 
     std::thread t1([&](){
         asio::io_service iov;
+        auto mc_client = grok::MsgCenter::Create();
         auto client = grok::NodeClient::Create(iov, ip, port, "test1");
-        client->evMsgCome += delegate(msgcenter, &MsgCenter::msg_operator);
-        test.regster_client1(msgcenter);
+        client->evMsgCome += delegate(mc_client, &MsgCenter::msg_operator);
+        mc_client->imWriteMsgPack = make_function_wrapper(client, &grok::NodeClient::write_msgpack);
+        test.regster_client1(mc_client);
+        mc_client->start(1);
+
         asio::basic_waitable_timer<std::chrono::steady_clock> w(iov);
         w.expires_from_now(std::chrono::seconds(2));
         w.async_wait([client](boost::system::error_code ec){
             nodemsg_test::TestReq1 req;
             req.set_req("hello");
-            client->send_request_pb("test2", &req);
+            client->send_request_pb("test2", req);
         });
         iov.run();
         return ;
     });
     std::thread t2([&](){
         asio::io_service iov;
+        auto mc_client = grok::MsgCenter::Create();
         auto client = grok::NodeClient::Create(iov, ip, port, "test2");
-        client->evMsgCome += delegate(msgcenter, &MsgCenter::msg_operator);
-        test.regster_client2(msgcenter);
+        client->evMsgCome += delegate(mc_client, &MsgCenter::msg_operator);
+        test.regster_client2(mc_client);
+        mc_client->imWriteMsgPack = make_function_wrapper(client, &grok::NodeClient::write_msgpack);
+        mc_client->start(1);
+
         iov.run();
         return ;
     });

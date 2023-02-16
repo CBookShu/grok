@@ -27,13 +27,18 @@ namespace grok
     class NodeCenter : boost::noncopyable, public std::enable_shared_from_this<NodeCenter> {
     public:
         using SPtr = std::shared_ptr<NodeCenter>;
-        EventNoMutex<Session::Ptr, MsgPackSPtr> evMsgCome;
+        EventNoMutex<MsgPackSPtr> evMsgCome;
 
         static SPtr Create(boost::asio::io_service& iov, int port);
 
         NetServer::SPtr get_server() {
             return m_net_server;
         }
+
+        // nodeCenter本身也可以做一个节点收发消息
+        std::uint32_t msg_msgnextidx();
+        void write_msgpack(MsgPackSPtr p);
+        void write_msg(const char* msgname, const char* dest, const char* data, std::size_t n, nodeService::MsgType type, std::uint32_t id);
     protected:
         // 网络事件
         void on_newsession(Session::Ptr s);
@@ -51,6 +56,7 @@ namespace grok
         };
         grwtype<Data> m_data;
         NetServer::SPtr m_net_server;
+        std::atomic_uint32_t m_req_sessionidx{0};
     };
 
     //TODO: 未来需要增加重连机制
@@ -58,7 +64,7 @@ namespace grok
     class NodeClient : boost::noncopyable, public std::enable_shared_from_this<NodeClient> {
     public:
         using SPtr = std::shared_ptr<NodeClient>;
-        EventNoMutex<Session::Ptr, MsgPackSPtr> evMsgCome;
+        EventNoMutex<MsgPackSPtr> evMsgCome;
 
         NodeClient() = default;
         static SPtr Create(boost::asio::io_service&iosvr, const char* ip, int port, std::string name);
@@ -71,37 +77,29 @@ namespace grok
         }
         Session::Ptr get_session();
 
-        void send_notify(std::string msgname, const std::string& dest, const char* data, std::size_t n);
-        template<typename Pb>
-        void send_notify_pb(const std::string& dest, Pb* pb) {
-            std::string data;
-            if(pb->SerializeToString(&data)) {
-                send_notify(Pb::descriptor()->full_name(), dest, data.c_str(), data.size());
-            }
-        }
+        std::uint32_t msg_msgnextidx();
+        void write_msgpack(MsgPackSPtr p);
+        void write_msg(const char* msgname, const char* dest, const char* data, std::size_t n, nodeService::MsgType type, std::uint32_t id);
 
-        void send_request(std::string msgname, const std::string& dest, const char* data, std::size_t n);
-        template<typename Pb>
-        void send_request_pb(const std::string& dest, Pb* pb) {
-            std::string data;
-            if(pb->SerializeToString(&data)) {
-                send_request(Pb::descriptor()->full_name(), dest, data.c_str(), data.size());
-            }
-        }
-
-        void send_response(nodeService::MsgPack* p, const char* data, std::size_t n);
-        template<typename Pb>
-        void send_response_pb(const std::string& dest, Pb* pb) {
-            std::string data;
-            if(pb->SerializeToString(&data)) {
-                send_response(Pb::descriptor()->full_name(), dest, data.c_str(), data.size());
+        template <typename PbReq>
+        void send_request_pb(const std::string& dest, PbReq& r) {
+            auto& msgname = PbReq::descriptor()->full_name();
+            MsgPackSPtr p = std::make_shared<nodeService::MsgPack>();
+            p->set_dest(dest);
+            p->set_msgname(msgname);
+            p->set_msgtype(nodeService::eMsg_request);
+            p->set_sessionid(msg_msgnextidx());
+            p->set_source(get_name());
+            if(r.SerializeToString(p->mutable_pbdata())) {
+                write_msgpack(p);
             }
         }
     protected:
         // 解析消息并分发
         void on_puremsg(Session::Ptr s, const char* d, std::size_t n);
-        // 消息顺序id
-        std::uint32_t msg_msgnextidx();
+        std::string get_name() const {
+            return m_ctx.name;
+        }
     protected:
         std::atomic_uint32_t m_req_sessionidx{0};
         NodeCtx m_ctx;
@@ -112,7 +110,8 @@ namespace grok
     // 就把msgpack投递到msgcenter的线程池上进行并发的处理
     class MsgCenter : boost::noncopyable, public std::enable_shared_from_this<MsgCenter> {
     public:
-        using MsgOpCall = std::function<void(Session::Ptr, MsgPackSPtr)>;
+        using MsgOpCall = std::function<void(MsgPackSPtr)>;
+        ImportFunctional<void(MsgPackSPtr p)> imWriteMsgPack;
 
         static MsgCenterSPtr Create();
 
@@ -126,16 +125,17 @@ namespace grok
         void post(GrokRunable* run);
 
         // msg注册和处理
-        void register_msg(std::string msgname, MsgOpCall&& cb);
+        void register_msg(const std::string& msgname, MsgOpCall&& cb);
 
         template <typename PbRep, typename PbRsp, typename F>
         // F 充当函数角色
         // f type -> void (MsgPackSPtr p, PbReq* req, PbRsp* rsp);
         // 并且会自动回复rsp
         void regsiter_reqrsp(F &&f) {
-            auto msgname = PbRep::descriptor()->full_name();
+            auto& msgname = PbRep::descriptor()->full_name();
             std::function<void(MsgPackSPtr,PbRep*,PbRsp*)> cb(std::forward<F>(f));
-            register_msg(msgname, [cb](Session::Ptr c, MsgPackSPtr p){
+            auto self = shared_from_this();
+            register_msg(msgname, [cb,self,this](MsgPackSPtr p){
                 PbRep req;
                 if(req.ParseFromString(p->pbdata())) {
                     PbRsp rsp;
@@ -144,10 +144,7 @@ namespace grok
                         p->set_msgtype(nodeService::eMsg_response);
                         p->set_msgname(PbRsp::descriptor()->full_name());
                         if(rsp.SerializeToString(p->mutable_pbdata())) {
-                            std::string data;
-                            if(p->SerializeToString(&data)) {
-                                c->write(data.c_str(), data.size());
-                            }
+                            imWriteMsgPack(p);
                         }
                     }
                 }
@@ -158,9 +155,9 @@ namespace grok
         // F 充当函数角色
         // f type -> void (MsgPackSPtr p, PbReq* req);
         void regster_rspnotify(F &&f) {
-            auto msgname = PbReq::descriptor()->full_name();
+            auto& msgname = PbReq::descriptor()->full_name();
             std::function<void(MsgPackSPtr,PbReq*)> cb(std::forward<F>(f));
-            register_msg(msgname, [cb](Session::Ptr c, MsgPackSPtr p){
+            register_msg(msgname, [cb](MsgPackSPtr p){
                 PbReq req;
                 if(req.ParseFromString(p->pbdata())) {
                     cb(p, &req);
@@ -168,7 +165,7 @@ namespace grok
             });
         }
         
-        void msg_operator(Session::Ptr s, MsgPackSPtr p);
+        void msg_operator(MsgPackSPtr p);
     protected:
         // 消息注册
         struct Data {
