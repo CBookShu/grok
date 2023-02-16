@@ -450,7 +450,7 @@ static int l_core_unionlock(lua_State* L) {
 	luaL_argcheck(L, lua_istable(L, 1), 1, "table need");
 	luaL_argcheck(L, lua_isfunction(L, 2), 2, "function need");
 	auto* mgr = LuaModelManager::get_instance();
-	assert(mgr);
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	grok::UnionLockLocal<const char*>::Keys keys;
 	int len = luaL_len(L, 1);
 	for (int i = 1; i <= len; ++i) {
@@ -469,9 +469,60 @@ static int l_core_unionlock(lua_State* L) {
 	return lua_gettop(L) - top;
 }
 
-static int l_msgcore_simulator(lua_State* L) {
-	
+static int l_msgcore_sendmsgpack(lua_State* L) {
+	auto* mgr = LuaModelManager::get_instance();
+	luaL_argcheck(L, mgr && mgr->msgcenter, 0, "mgr->msgcenter is null");
+	// arg1: table {source=xxx,dest=xxx,msgname=xxx,msgtype=xxx,sessionid=xxx,pbdata=xxx}
+	lua_getfield(L, 1, "dest");
+	const char* dest = luaL_checkstring(L, -1);
+	lua_pop(L, 1);
+
+	lua_getfield(L, 1, "msgname");
+	const char* msgname = luaL_checkstring(L, -1);
+	lua_pop(L, 1);
+
+	lua_getfield(L, 1, "msgtype");
+	int msgtype = luaL_checknumber(L, -1);
+	lua_pop(L, 1);
+
+	lua_getfield(L, 1, "pbdata");
+	size_t n = 0;
+	const char *pbdata = luaL_checklstring(L, -1, &n);
+	lua_pop(L, 1);
+
+	lua_getfield(L, 1, "source");
+	const char* source = luaL_checkstring(L, -1);
+	lua_pop(L, 1);
+
+	lua_getfield(L, 1, "sessionid");
+	auto sessionid = luaL_checkinteger(L, -1);
+	lua_pop(L, 1);
+
+	auto p = std::make_shared<nodeService::MsgPack>();
+	p->set_dest(dest);
+	p->set_source(source);
+	p->set_msgname(msgname);
+	p->set_msgtype((nodeService::MsgType)msgtype);
+	p->set_sessionid(sessionid);
+	p->mutable_pbdata()->assign(pbdata, n);
+	mgr->msgcenter->imWriteMsgPack(p);
 	return 0;
+}
+
+static int l_msgcore_msgnextid(lua_State* L) {
+	auto* mgr = LuaModelManager::get_instance();
+	luaL_argcheck(L, mgr && mgr->msgcenter, 0, "mgr->msgcenter is null");
+	auto id = mgr->msgcenter->imMsgNextID();
+	lua_pushinteger(L, id);
+	return 1;
+}
+
+static int l_msgcore_nodename(lua_State* L) {
+	auto* mgr = LuaModelManager::get_instance();
+	luaL_argcheck(L, mgr && mgr->msgcenter, 0, "mgr->msgcenter is null");
+	auto name = mgr->msgcenter->imNodeName();
+	lua_pushstring(L, name.c_str());
+	return 1;
 }
 
 int luaopen_core(lua_State *L)
@@ -482,6 +533,9 @@ int luaopen_core(lua_State *L)
 		{ "core_set_cache", l_core_set_cache},
 		{ "core_get_cache", l_core_get_cache},
 		{ "core_unionlock", l_core_unionlock},
+		{ "msgcore_sendmsgpack", l_msgcore_sendmsgpack},
+		{ "msgcore_msgnextid", l_msgcore_msgnextid},
+		{ "msgcore_nodename", l_msgcore_nodename},
 		{ NULL, NULL },
 	};
 
@@ -495,7 +549,7 @@ static int l_cmdcore_start(lua_State* L) {
 	std::string path = luaL_checkstring(L, 2);
 
 	auto* mgr = LuaModelManager::get_instance();
-
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	// 先检查一下name是否已经注册过lua模块了
 	auto m = mgr->get_luamodel(name);
 	if(m) {
@@ -544,7 +598,7 @@ static int l_cmdcore_start(lua_State* L) {
 static int l_cmdcore_stop(lua_State* L) {
 	const char* name = luaL_checkstring(L, 1);
 	auto* mgr = LuaModelManager::get_instance();
-
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	auto m = mgr->del_luamodel(name);
 	if(!m) {
 		lua_pushboolean(L, 1);
@@ -562,6 +616,7 @@ static int l_cmdcore_restart(lua_State* L) {
 	std::string path = luaL_checkstring(L, 2);
 
 	auto* mgr = LuaModelManager::get_instance();
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	auto m = mgr->get_luamodel(name);
 	if (!m) {
 		// 不能重复注册
@@ -609,6 +664,7 @@ static int l_cmdcore_list(lua_State* L) {
 	lua_newtable(L);
 
 	auto* mgr = LuaModelManager::get_instance();
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	auto r = mgr->lua_models.readGuard();
 	int idx = 1;
 	for(auto& it:r->name2model) {
@@ -642,6 +698,7 @@ static int l_modelcore_file_listen(lua_State* L) {
 	auto millsec = luaL_checknumber(L, 4);
 
 	auto* mgr = LuaModelManager::get_instance();
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	auto m = mgr->get_luamodel(name);
 	if(!m) {
 		DBG("ModelName Error:%s", name);
@@ -663,7 +720,8 @@ static int l_modelcore_file_listen(lua_State* L) {
 	}
 
 	auto timer = listen_file_modify(m->staff, filepath, [m,callbackid](const char* path){
-		if(LuaModelManager::get_instance()->invoke_lua_callback(m->L, callbackid)) {
+		auto* mgr = LuaModelManager::get_instance();
+		if(mgr->invoke_lua_callback(m->L, callbackid)) {
 			DBG("Callback Error:%lf,%s,%s", callbackid, lua_tostring(m->L, -1), path);
 		}
 	},millsec);
@@ -678,6 +736,7 @@ static int l_modelcore_file_stoplisten(lua_State* L) {
 	const char* filepath = luaL_checkstring(L, 2);
 
 	auto* mgr = LuaModelManager::get_instance();
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	auto m = mgr->get_luamodel(name);
 	if(!m) {
 		DBG("ModelName Error:%s", name);
@@ -702,6 +761,7 @@ static int l_modelcore_timer_start(lua_State* L) {
 	size_t millisec = luaL_checknumber(L, 3);
 
 	auto* mgr = LuaModelManager::get_instance();
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	auto m = mgr->get_luamodel(name);
 	if(!m) {
 		DBG("ModelName Error:%s", name);
@@ -716,7 +776,8 @@ static int l_modelcore_timer_start(lua_State* L) {
 	}
 
 	auto timer = m->staff.evp().loopTimer([m,callbackid](){
-		if(LuaModelManager::get_instance()->invoke_lua_callback(m->L, callbackid)) {
+		auto* mgr = LuaModelManager::get_instance();
+		if(mgr->invoke_lua_callback(m->L, callbackid)) {
 			DBG("Callback Error:%lf,%s", callbackid, lua_tostring(m->L, -1));
 		}
 	}, std::chrono::milliseconds(millisec), m->staff.strand());
@@ -731,6 +792,7 @@ static int l_modelcore_timer_stop(lua_State* L) {
 	auto callbackid = luaL_checknumber(L, 2);
 
 	auto* mgr = LuaModelManager::get_instance();
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	auto m = mgr->get_luamodel(name);
 	if(!m) {
 		DBG("ModelName Error:%s", name);
@@ -850,7 +912,7 @@ static int l_dbcore_mysql_query(lua_State*L) {
 static int l_dbcore_mysql_get(lua_State* L) {
 	luaL_argcheck(L, lua_isfunction(L, 1), 1, "function need");
 	auto* mgr = LuaModelManager::get_instance();
-	assert(mgr);
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	auto guard = mgr->mysqlpool->GetByGuard();
 	grok::mysql::MysqlClient* db = guard.Get();
 	lua_pushlightuserdata(L, db);
@@ -943,7 +1005,7 @@ static int l_dbcore_redis_cmds(lua_State* L) {
 static int l_dbcore_redis_get(lua_State* L) {
 	luaL_argcheck(L, lua_isfunction(L, 1), 1, "function need");
 	auto* mgr = LuaModelManager::get_instance();
-	assert(mgr);
+	luaL_argcheck(L, mgr, 0, "mgr is null");
 	auto guard = mgr->redispool->GetByGuard();
 	grok::redis::RedisCon* rds = guard.Get();
 	lua_pushlightuserdata(L, rds);
@@ -1309,22 +1371,19 @@ void LuaModelManager::init(int argc, char** argv)
 	sqlconfig.user = "cbookshu";
 	sqlconfig.pwd = "cs123456";
 	mysqlpool = mysql::MysqlPool::Create(dbcon, sqlconfig);
-	// if(!mysqlpool->GetByGuard()->GetCtx()) {
-	// 	DBG("mysql con error");
-	// 	exit(1);
-	// }
+	if(!mysqlpool->GetByGuard()->GetCtx()) {
+		DBG("mysql con error");
+		exit(1);
+	}
 
 	redis::RedisConfig rdsconfig;
 	rdsconfig.url = "localhost";
 	rdsconfig.port = 6379;
 	redispool = redis::RedisConPool::Create(dbcon, rdsconfig);
-	// if(!redispool->GetByGuard()->GetCtx()) {
-	// 	DBG("redis con error");
-	// 	exit(1);
-	// }
-
-	// 先创建消息分发
-	msgcenter = MsgCenter::Create();
+	if(!redispool->GetByGuard()->GetCtx()) {
+		DBG("redis con error");
+		exit(1);
+	}
 
 	// 启动脚本，创建lua模块
 	if(!create_lua_cmd(start_script.c_str())) {

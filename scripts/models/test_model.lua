@@ -168,3 +168,11 @@ r,txt = lcore.unionlock({"hello", "world"}, function ()
 end)
 assert(r, "unionlock api not pass")
 lcore.logtrace(txt)
+
+-- msgcore 测试
+local msgnextid = lcore.msgnextid()
+assert(type(msgnextid) == "number")
+lcore.logtrace("msgnextid:%d",msgnextid)
+local nodename = lcore.nodename()
+assert(type(nodename) == "string")
+lcore.logtrace("nodename:%s", nodename)

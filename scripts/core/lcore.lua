@@ -75,9 +75,24 @@ function lcore.get_cache(model_name, key)
 end
 
 -- 举例
--- 
+-- lcore.unionlock({"task_userid1", "task_userid2"}, function() xxx end)
 function lcore.unionlock(keys, cb)
     return core.core_unionlock(keys or {}, cb)
+end
+
+-- 举例[TODO]
+-- lcore.sendmsgpack({source = ""})
+function lcore.sendmsgpack(msgpack)
+    return core.msgcore_sendmsgpack(msgpack)
+end
+
+-- 举例[TODO]
+function lcore.msgnextid()
+    return core.msgcore_msgnextid()
+end
+
+function lcore.nodename()
+    return core.msgcore_nodename()
 end
 
 return lcore
