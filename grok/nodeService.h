@@ -28,17 +28,34 @@ namespace grok
     public:
         using SPtr = std::shared_ptr<NodeCenter>;
         EventNoMutex<MsgPackSPtr> evMsgCome;
+        static std::string gNodeCenterName;
 
         static SPtr Create(boost::asio::io_service& iov, int port);
 
         NetServer::SPtr get_server() {
             return m_net_server;
         }
-
+        std::string get_name() {
+            return gNodeCenterName;
+        }
         // nodeCenter本身也可以做一个节点收发消息
         std::uint32_t msg_msgnextidx();
         void write_msgpack(MsgPackSPtr p);
         void write_msg(const char* msgname, const char* dest, const char* data, std::size_t n, nodeService::MsgType type, std::uint32_t id);
+
+        template <typename PbReq>
+        void send_request_pb(const std::string& dest, PbReq& r) {
+            auto& msgname = PbReq::descriptor()->full_name();
+            MsgPackSPtr p = std::make_shared<nodeService::MsgPack>();
+            p->set_dest(dest);
+            p->set_msgname(msgname);
+            p->set_msgtype(nodeService::eMsg_request);
+            p->set_sessionid(msg_msgnextidx());
+            p->set_source(gNodeCenterName);
+            if(r.SerializeToString(p->mutable_pbdata())) {
+                write_msgpack(p);
+            }
+        }
     protected:
         // 网络事件
         void on_newsession(Session::Ptr s);
@@ -79,7 +96,9 @@ namespace grok
             }
         }
         Session::Ptr get_session();
-
+        std::string get_name() {
+            return m_ctx.name;
+        }
         std::uint32_t msg_msgnextidx();
         void write_msgpack(MsgPackSPtr p);
         void write_msg(const char* msgname, const char* dest, const char* data, std::size_t n, nodeService::MsgType type, std::uint32_t id);
@@ -100,9 +119,6 @@ namespace grok
     protected:
         // 解析消息并分发
         void on_puremsg(Session::Ptr s, const char* d, std::size_t n);
-        std::string get_name() const {
-            return m_ctx.name;
-        }
         bool check_self_msg(MsgPackSPtr p);
         bool simulator_self_msg(MsgPackSPtr p);
     protected:
@@ -116,7 +132,9 @@ namespace grok
     class MsgCenter : boost::noncopyable, public std::enable_shared_from_this<MsgCenter> {
     public:
         using MsgOpCall = std::function<void(MsgPackSPtr)>;
-        ImportFunctional<void(MsgPackSPtr p)> imWriteMsgPack;
+        ImportFunctional<void(MsgPackSPtr)> imWriteMsgPack;
+        ImportFunctional<std::uint32_t()> imMsgNextID; 
+        ImportFunctional<std::string()> imNodeName;
 
         static MsgCenterSPtr Create();
 

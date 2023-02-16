@@ -2,7 +2,6 @@
 #include <thread>
 
 using namespace grok;
-static std::string gNodeCenterName = "NodeCenter";
 
 struct MsgPackHelper {
     template<typename PB>
@@ -43,6 +42,7 @@ struct MsgPackOperatorRun : GrokRunable {
     }
 };
 
+std::string grok::NodeCenter::gNodeCenterName = "NodeCenter";
 grok::NodeCenter::SPtr grok::NodeCenter::Create(boost::asio::io_service& iov, int port)
 {
     auto t = std::thread::hardware_concurrency() + 1;
@@ -60,7 +60,7 @@ grok::NodeCenter::SPtr grok::NodeCenter::Create(boost::asio::io_service& iov, in
 
 std::uint32_t grok::NodeCenter::msg_msgnextidx()
 {
-    return m_req_sessionidx.fetch_add(1);
+    return ++m_req_sessionidx;
 }
 
 void grok::NodeCenter::write_msgpack(MsgPackSPtr p)
@@ -358,7 +358,7 @@ bool grok::NodeClient::simulator_self_msg(MsgPackSPtr p)
 
 std::uint32_t grok::NodeClient::msg_msgnextidx()
 {
-    return m_req_sessionidx.fetch_add(1);
+    return ++m_req_sessionidx;
 }
 
 MsgCenterSPtr grok::MsgCenter::Create()
