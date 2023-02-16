@@ -49,6 +49,9 @@ namespace grok
         void on_registernode(MsgPackSPtr p, Session::Ptr s);
         void on_nodemsg(MsgPackSPtr p, Session::Ptr s);
         Session::Ptr get_session(const std::string& name);
+
+        bool check_self_msg(MsgPackSPtr p);
+        bool simulator_self_msg(MsgPackSPtr p);
     protected:
         struct Data {
             std::unordered_map<std::string, std::string> key2name;
@@ -100,6 +103,8 @@ namespace grok
         std::string get_name() const {
             return m_ctx.name;
         }
+        bool check_self_msg(MsgPackSPtr p);
+        bool simulator_self_msg(MsgPackSPtr p);
     protected:
         std::atomic_uint32_t m_req_sessionidx{0};
         NodeCtx m_ctx;

@@ -65,30 +65,18 @@ std::uint32_t grok::NodeCenter::msg_msgnextidx()
 
 void grok::NodeCenter::write_msgpack(MsgPackSPtr p)
 {
+    if(simulator_self_msg(p)) {
+        // 直接发给自己的消息
+        return ;
+    }
+
     if (p->msgtype() == nodeService::eMsg_response) {
-        if (p->source() == gNodeCenterName) {
-            // 返回给自己的消息
-            auto self = this->shared_from_this();
-            m_net_server->iosvr_rnd().dispatch([p, self, this](){
-                evMsgCome(p);
-            });
-            return;
-        }
         auto session = get_session(p->source());
         if (!session) {
             DBG("session:%s miss", p->source().c_str());
             return;
         }
         MsgPackHelper::Send(session, p.get());
-        return;
-    }
-
-    if(p->dest() == gNodeCenterName) {
-        // 自己给自己发消息
-        auto self = this->shared_from_this();
-        m_net_server->iosvr_rnd().dispatch([p, self, this](){
-            evMsgCome(p);
-        });
         return;
     }
 
@@ -256,6 +244,28 @@ Session::Ptr grok::NodeCenter::get_session(const std::string& name)
     return nullptr;
 }
 
+bool grok::NodeCenter::check_self_msg(MsgPackSPtr p)
+{
+    if(p->msgtype() == nodeService::eMsg_response) {
+        return p->source() == gNodeCenterName;
+    }
+
+    return p->dest() == gNodeCenterName;
+}
+
+bool grok::NodeCenter::simulator_self_msg(MsgPackSPtr p)
+{
+    if(!check_self_msg(p)) {
+        return false;
+    }
+
+    auto self = shared_from_this();
+    m_net_server->iosvr_rnd().dispatch([self,p,this](){
+        evMsgCome(p);
+    });
+    return true;
+}
+
 grok::NodeClient::SPtr grok::NodeClient::Create(boost::asio::io_service &iosvr, const char *ip, int port, std::string name)
 {
     SPtr r = std::make_shared<NodeClient>();
@@ -282,6 +292,9 @@ Session::Ptr grok::NodeClient::get_session()
 
 void grok::NodeClient::write_msgpack(MsgPackSPtr p)
 {
+    if(simulator_self_msg(p)) {
+        return;
+    }
     auto self = this->shared_from_this();
     dispatch([p, self, this](){
         MsgPackHelper::Send(m_ctx.s, p.get());
@@ -296,6 +309,13 @@ void grok::NodeClient::write_msg(const char *msgname, const char *dest, const ch
     p->mutable_pbdata()->assign(data, n);
     p->set_msgtype(type);
     p->set_sessionid(id);
+    p->set_source(get_name());
+
+    if(simulator_self_msg(p)) {
+        // 发给自己
+        return;
+    }
+
     auto self = shared_from_this();
     dispatch([p, self, this](){
         p->set_source(m_ctx.name);
@@ -313,6 +333,27 @@ void grok::NodeClient::on_puremsg(Session::Ptr s, const char *d, std::size_t n)
     }
 
     evMsgCome(pack);
+}
+
+bool grok::NodeClient::check_self_msg(MsgPackSPtr p)
+{
+    auto name = get_name();
+    if(p->msgtype() == nodeService::eMsg_response) {
+        return p->source() == name;
+    }
+    return p->dest() == name;
+}
+
+bool grok::NodeClient::simulator_self_msg(MsgPackSPtr p)
+{
+    if(!check_self_msg(p)) {
+        return false;
+    }
+    auto self = shared_from_this();
+    dispatch([self,p,this](){
+        evMsgCome(p);
+    });
+    return true;
 }
 
 std::uint32_t grok::NodeClient::msg_msgnextidx()
