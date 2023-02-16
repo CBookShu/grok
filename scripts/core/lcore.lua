@@ -91,6 +91,7 @@ function lcore.msgnextid()
     return core.msgcore_msgnextid()
 end
 
+-- 举例[TODO]
 function lcore.nodename()
     return core.msgcore_nodename()
 end
