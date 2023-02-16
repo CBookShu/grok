@@ -153,3 +153,13 @@ ldbcore.redis_get(function (db)
         assert(res[1][2][i] == fmt("v%d",i))
     end
 end)
+
+
+-- union lock 测试用例
+local r1,r2,r3 = lcore.unionlock({"hello", "world"}, function ()
+    print("locak hello and world")
+    return 1,2,3
+end)
+print("union local r1 ret:", r1)
+print("union local r2 ret:", r2)
+print("union local r3 ret:", r3)

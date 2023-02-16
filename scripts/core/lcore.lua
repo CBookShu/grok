@@ -74,4 +74,10 @@ function lcore.get_cache(model_name, key)
     end
 end
 
+-- 举例
+-- 
+function lcore.unionlock(keys, cb)
+    return core.core_unionlock(keys or {}, cb)
+end
+
 return lcore

@@ -443,6 +443,33 @@ static int l_core_log(lua_State*L) {
 	return 0;
 }
 
+
+static int l_core_unionlock(lua_State* L) {
+	// p1: table {[1] = key1, [2] = key2, [3] = key3...}
+
+	luaL_argcheck(L, lua_istable(L, 1), 1, "table need");
+	luaL_argcheck(L, lua_isfunction(L, 2), 2, "function need");
+	auto* mgr = LuaModelManager::get_instance();
+	assert(mgr);
+	grok::UnionLockLocal<const char*>::Keys keys;
+	int len = luaL_len(L, 1);
+	for (int i = 1; i <= len; ++i) {
+		lua_geti(L, 1, i);
+		keys.insert(luaL_checkstring(L, -1));
+		lua_pop(L, 1);
+	}
+
+	int top = lua_gettop(L) - 1;	// fuc 会在call后移除栈
+	auto g = mgr->unionlock.LockGuard(keys);
+	if (lua_pcall(L, 0, LUA_MULTRET, 0)) {
+		DBG("Call Error %s", lua_tostring(L, -1));
+		lua_pushnil(L);
+		return 1;
+	}
+	return lua_gettop(L) - top;
+}
+
+
 int luaopen_core(lua_State *L)
 {
 	luaL_Reg reg[] = {
@@ -450,6 +477,7 @@ int luaopen_core(lua_State *L)
 		{ "core_log", l_core_log },
 		{ "core_set_cache", l_core_set_cache},
 		{ "core_get_cache", l_core_get_cache},
+		{ "core_unionlock", l_core_unionlock},
 		{ NULL, NULL },
 	};
 
@@ -806,12 +834,13 @@ static int l_dbcore_mysql_query(lua_State*L) {
 		detail::Helper_Bind_Cpp_Func(L, "get_blob", (t_func_get_blob)&Records::GetBlob);
 	}
 	lua_setmetatable(L, -2);
-	int r = lua_pcall(L, 1, 1, 0);
+	int top = lua_gettop(L) - 2;	// - func,record
+	int r = lua_pcall(L, 1, LUA_MULTRET, 0);
 	if (r) {
 		DBG("call error:%s", lua_tostring(L, -1));
 		return 1;
 	}
-	return 1;
+	return lua_gettop(L) - top;
 }
 
 static int l_dbcore_mysql_get(lua_State* L) {
@@ -835,13 +864,14 @@ static int l_dbcore_mysql_get(lua_State* L) {
 		lua_settable(L, -3);
 	}
 	lua_setmetatable(L, -2);
-	int r = lua_pcall(L, 1, 1, 0);
+	int top = lua_gettop(L) - 2;// func,db
+	int r = lua_pcall(L, 1, LUA_MULTRET, 0);
 	if(r) {
 		DBG("call error:%s", lua_tostring(L, -1));
 		lua_pushnumber(L, -1);
 		return 1;
 	}
-	return 1;
+	return lua_gettop(L) - top;
 }
 
 static int l_dbcore_redis_cmds(lua_State* L) {
@@ -924,13 +954,14 @@ static int l_dbcore_redis_get(lua_State* L) {
 		lua_settable(L, -3);
 	}
 	lua_setmetatable(L, -2);
-	int r = lua_pcall(L, 1, 1, 0);
+	int top = lua_gettop(L) - 2; // func,rds
+	int r = lua_pcall(L, 1, LUA_MULTRET, 0);
 	if(r) {
 		DBG("call error:%s", lua_tostring(L, -1));
 		lua_pushnumber(L, -1);
 		return 1;
 	}
-	return 1;
+	return lua_gettop(L) - top;
 }
 
 LUAMOD_API int luaopen_dbcore(lua_State *L)
@@ -1290,19 +1321,19 @@ void LuaModelManager::init(int argc, char** argv)
 	sqlconfig.user = "cbookshu";
 	sqlconfig.pwd = "cs123456";
 	mysqlpool = mysql::MysqlPool::Create(dbcon, sqlconfig);
-	if(!mysqlpool->GetByGuard()->GetCtx()) {
-		DBG("mysql con error");
-		exit(1);
-	}
+	// if(!mysqlpool->GetByGuard()->GetCtx()) {
+	// 	DBG("mysql con error");
+	// 	exit(1);
+	// }
 
 	redis::RedisConfig rdsconfig;
 	rdsconfig.url = "localhost";
 	rdsconfig.port = 6379;
 	redispool = redis::RedisConPool::Create(dbcon, rdsconfig);
-	if(!redispool->GetByGuard()->GetCtx()) {
-		DBG("redis con error");
-		exit(1);
-	}
+	// if(!redispool->GetByGuard()->GetCtx()) {
+	// 	DBG("redis con error");
+	// 	exit(1);
+	// }
 
 	// 先创建消息分发
 	msgcenter = MsgCenter::Create();

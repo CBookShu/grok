@@ -88,7 +88,7 @@ struct LuaModelManager : public grok::WorkStaff {
     // 消息分发lua脚本
     grok::LockList<lua_State, LuaStateDeleter> lua_scripts;
     // 多线程竞争的联合锁
-    grok::UnionLockLocal<std::string> unionlock;
+    grok::UnionLockLocal<const char*> unionlock;
     // mysql pool
     grok::mysql::MysqlPool::SPtr mysqlpool;
     // redids pool
