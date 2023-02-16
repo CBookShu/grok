@@ -64,7 +64,7 @@ lcore.logtrace("sun_info_cache_des:%s", sun_info_cache_des)
 
 -- dbcore 测试用例
 local ldbcore = require "scripts.core.ldbcore"
-ldbcore.mysql_get(function (db)
+local r,txt = ldbcore.mysql_get(function (db)
     local t = ldbcore.mysql_wrapper_query(db)
     -- t:query("SELECT NOW() AS T", function (r)
     --     local res = ldbcore.mysql_wrapper_res(r)
@@ -93,7 +93,11 @@ ldbcore.mysql_get(function (db)
             assert(s2 == string.format("hello%d", i))
         end
     end)
+
+    return true, "mysql_db_api_pass"
 end)
+assert(r, "mysql_db_api_not_pass")
+lcore.logtrace(txt)
 
 local function dbg(t)
     local dbg_s = debug_table(t)
@@ -101,7 +105,7 @@ local function dbg(t)
 end
 
 local rds_rpl_t = ldbcore.rdis_status
-ldbcore.redis_get(function (db)
+r,txt = ldbcore.redis_get(function (db)
     local rds = ldbcore.redis_wrapper_query(db)
     local res = rds:query("SELECT ?", 1)
     assert(res and res[1][1] ~= rds_rpl_t.type_rpl_err and res[1][1] ~= rds_rpl_t.type_rpl_ctxerr)
@@ -152,14 +156,15 @@ ldbcore.redis_get(function (db)
     for i = 1, count do
         assert(res[1][2][i] == fmt("v%d",i))
     end
+    return true, "redis_db_api_pass"
 end)
-
+assert(r, "redis_db_api_not_pass")
+lcore.logtrace(txt)
 
 -- union lock 测试用例
-local r1,r2,r3 = lcore.unionlock({"hello", "world"}, function ()
+r,txt = lcore.unionlock({"hello", "world"}, function ()
     print("locak hello and world")
-    return 1,2,3
+    return true, "unionlock api pass"
 end)
-print("union local r1 ret:", r1)
-print("union local r2 ret:", r2)
-print("union local r3 ret:", r3)
+assert(r, "unionlock api not pass")
+lcore.logtrace(txt)

@@ -469,6 +469,10 @@ static int l_core_unionlock(lua_State* L) {
 	return lua_gettop(L) - top;
 }
 
+static int l_msgcore_simulator(lua_State* L) {
+	
+	return 0;
+}
 
 int luaopen_core(lua_State *L)
 {
@@ -974,22 +978,6 @@ LUAMOD_API int luaopen_dbcore(lua_State *L)
 
 	luaL_newlib(L, reg);
 	return 1;
-}
-
-static int l_msgcore_simulator(lua_State* L) {
-	// TODO: 需要这个么?
-	return 0;
-}
-
-LUAMOD_API int luaopen_msgcore(lua_State *L)
-{
-	luaL_Reg reg[] = {
-		{ "msgcore_simulator", l_msgcore_simulator },
-		{ NULL, NULL },
-	};
-
-	luaL_newlib(L, reg);
-    return 1;
 }
 
 static lua_State* create_lua_scripts(const char* path) {
