@@ -9,11 +9,12 @@
     5.  联锁local and redis
 ## redis缓存mysql功能
 
+## 跨平台的编译
+    1. 将依赖库[除boost]挪到deps中，方便一次性编译
+    2. 生成cmake 进行使用
 
 ## 业务实现
-    1.  玩家登录
-    2.  任务
-    3.  排行赛
+    
 
 ## node协议修改
     1.  原始c包增加type，标识register
