@@ -59,6 +59,8 @@ struct LuaModel : public std::enable_shared_from_this<LuaModel> {
      std::unordered_map<double, grok::stdtimerPtr> timers;
     // staff 控制 end
 
+    std::atomic_bool init{false};
+
     // 模块的缓存[由自己保证竞争安全]
     grok::grwtype<LuaTable> cache;
 };
@@ -74,15 +76,19 @@ struct LuaStateDeleter {
     }
 };
 
-struct LuaModelManager : public grok::WorkStaff {
+struct LuaModelManager {
     struct Data {
         std::unordered_map<std::string, LuaModel::SPtr> name2model;
     };
+    ImportFunctional<void(grok::MsgPackSPtr)> imWriteMsgPack;
+    ImportFunctional<std::uint32_t()> imMsgNextID; 
+    ImportFunctional<std::string()> imNodeName;
 
-    // 主线程的消息循环
-    boost::asio::io_service ios;
-    // node的消息注册、处理线程池
-    grok::MsgCenterSPtr msgcenter;
+
+    // 主线程池
+    grok::EventPools::Ptr thread_pool;
+    // models的 strand 主要用于执行usercmd
+    grok::WorkStaff staff;
     // lua模块脚本
     grok::grwtype<Data> lua_models;
     // 消息分发lua脚本
@@ -106,11 +112,12 @@ struct LuaModelManager : public grok::WorkStaff {
     void start();
     void stop();
 
-    void on_msg(grok::Session::Ptr s, grok::MsgPackSPtr p);
+    void on_msg(grok::MsgPackSPtr p);
 
     // lua的回调函数用LUA_CALLBACK_FINDER来保存，简单易控
 #define	LUA_CALLBACK_MAIN	    "__LUA_CALLBACK_MAIN__"
 #define LUA_PROJECT_DIR         "scripts/"
+#define LUA_MSG_MAIN            "main.lua"
     // lua model 操作函数
     void new_luamodel(const char* name, LuaModel::SPtr m);
     void replace_luamodel(const char* name, LuaModel::SPtr m_old, LuaModel::SPtr m_new);

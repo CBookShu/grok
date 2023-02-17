@@ -31,6 +31,7 @@ namespace grok
         static std::string gNodeCenterName;
 
         static SPtr Create(boost::asio::io_service& iov, int port);
+        static SPtr Create(boost::asio::io_service& iov);
 
         NetServer::SPtr get_server() {
             return m_net_server;

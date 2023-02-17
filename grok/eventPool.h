@@ -272,7 +272,7 @@ namespace grok
         typedef std::shared_ptr<WorkStaff> Ptr;
         typedef std::shared_ptr<Strand> StrandPtr;
 
-        WorkStaff() : m_evp(EventPools::defaultEventPools()), m_strand(std::make_shared<Strand>(m_evp->strand())) {}
+        WorkStaff() = default;
         WorkStaff(EventPools::Ptr evp) : m_evp(evp), m_strand(std::make_shared<Strand>(m_evp->strand())) {}
 
         EventPools& evp()

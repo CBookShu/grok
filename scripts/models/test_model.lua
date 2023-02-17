@@ -38,7 +38,7 @@ lcore.logtrace(s)
 local protobuf = require "scripts.utils.protobuf"
 local curdir = lcore.curdir()
 lcore.logtrace("cur dir:%s", curdir)
-protobuf.register_file("scripts/models/test_model.pb")
+protobuf.register_file("scripts/pb/test_model.pb")
 local sun_info = {
     -- string name = 1;
     -- int32 age = 2;

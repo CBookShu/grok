@@ -58,6 +58,17 @@ grok::NodeCenter::SPtr grok::NodeCenter::Create(boost::asio::io_service& iov, in
     return sptr;
 }
 
+grok::NodeCenter::SPtr grok::NodeCenter::Create(boost::asio::io_service &iov)
+{
+    auto sptr = std::make_shared<NodeCenter>();
+    sptr->m_net_server = std::make_shared<NetServer>(iov);
+    sptr->m_net_server->evClose += delegate(sptr, &NodeCenter::on_closesession);
+    sptr->m_net_server->evConnect += delegate(sptr, &NodeCenter::on_newsession);
+    sptr->m_net_server->evMsg += delegate(sptr, &NodeCenter::on_puremsg);
+
+    return sptr;
+}
+
 std::uint32_t grok::NodeCenter::msg_msgnextidx()
 {
     return ++m_req_sessionidx;

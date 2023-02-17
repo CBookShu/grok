@@ -335,7 +335,6 @@ namespace detail {
 
 	struct MsgPackWithSession {
 		grok::MsgPackSPtr msg;
-		grok::Session::Ptr session;
 
 		boost::string_view get_source() {
 			return msg->source();
@@ -356,22 +355,21 @@ namespace detail {
 			return msg->pbdata();
 		}
 		void write_msg(const char* source,const char*dest,const char*msgname,std::int64_t type,const char *data,size_t len) {
-			nodeService::MsgPack msgpack;
-			msgpack.set_source(source);
-			msgpack.set_dest(dest);
-			msgpack.set_msgname(msgname);
-			if (type >= nodeService::eMsg_none && type <= nodeService::eMsg_notify) {
-				msgpack.set_msgtype(nodeService::MsgType(type));
-			} else {
-				msgpack.set_msgtype(nodeService::MsgType::eMsg_none);
-			}
-			msgpack.set_sessionid(msg->sessionid());
-			msgpack.mutable_pbdata()->assign(data, len);
+			auto* mgr = LuaModelManager::get_instance();
+			// mgr->msgcenter->imWriteMsgPack()
 
-			std::string s;
-			if (msgpack.SerializeToString(&s)) {
-				session->write(s.data(), s.size());
-			}
+			// grok::MsgPackSPtr p = std::make_shared<nodeService::MsgPack>();
+			// p->set_source(source);
+			// p->set_dest(dest);
+			// p->set_msgname(msgname);
+			// p->set_msgtype(nodeService::MsgType(type));
+			// p->set_sessionid(msg->sessionid());
+			// p->mutable_pbdata()->assign(data, len);
+
+			// std::string s;
+			// if (p->SerializeToString(&s)) {
+			// 	mgr->msgcenter->imWriteMsgPack()
+			// }
 		}
 	};
 }	
@@ -471,7 +469,7 @@ static int l_core_unionlock(lua_State* L) {
 
 static int l_msgcore_sendmsgpack(lua_State* L) {
 	auto* mgr = LuaModelManager::get_instance();
-	luaL_argcheck(L, mgr && mgr->msgcenter, 0, "mgr->msgcenter is null");
+	luaL_argcheck(L, mgr && mgr->imWriteMsgPack, 0, "mgr->msgcenter is null");
 	// arg1: table {source=xxx,dest=xxx,msgname=xxx,msgtype=xxx,sessionid=xxx,pbdata=xxx}
 	lua_getfield(L, 1, "dest");
 	const char* dest = luaL_checkstring(L, -1);
@@ -505,22 +503,22 @@ static int l_msgcore_sendmsgpack(lua_State* L) {
 	p->set_msgtype((nodeService::MsgType)msgtype);
 	p->set_sessionid(sessionid);
 	p->mutable_pbdata()->assign(pbdata, n);
-	mgr->msgcenter->imWriteMsgPack(p);
+	mgr->imWriteMsgPack(p);
 	return 0;
 }
 
 static int l_msgcore_msgnextid(lua_State* L) {
 	auto* mgr = LuaModelManager::get_instance();
-	luaL_argcheck(L, mgr && mgr->msgcenter, 0, "mgr->msgcenter is null");
-	auto id = mgr->msgcenter->imMsgNextID();
+	luaL_argcheck(L, mgr && mgr->imMsgNextID, 0, "mgr->msgcenter is null");
+	auto id = mgr->imMsgNextID();
 	lua_pushinteger(L, id);
 	return 1;
 }
 
 static int l_msgcore_nodename(lua_State* L) {
 	auto* mgr = LuaModelManager::get_instance();
-	luaL_argcheck(L, mgr && mgr->msgcenter, 0, "mgr->msgcenter is null");
-	auto name = mgr->msgcenter->imNodeName();
+	luaL_argcheck(L, mgr && mgr->imNodeName, 0, "mgr->msgcenter is null");
+	auto name = mgr->imNodeName();
 	lua_pushstring(L, name.c_str());
 	return 1;
 }
@@ -577,6 +575,7 @@ static int l_cmdcore_start(lua_State* L) {
 	
 	// 开始执行模块的真正代码，model的lua state只能在staff的strand中执行
 	// 避免任何竞争
+	m->staff.setevp(mgr->thread_pool);
 	m->staff.async<void>([m,path](){
 		if(!m->L) {
 			return ;
@@ -589,6 +588,8 @@ static int l_cmdcore_start(lua_State* L) {
 			// 模块一旦注册，但是调用失败，模块自己不能把自己释放，这里会产生竞争
 			// 应该由执行者关注结果，失败要主动调用cmd_stop来把模块关掉
 		}
+
+		m->init = true;
 	});
 	DBG("LuaModel start:%s", name);
 	lua_pushboolean(L, 1);
@@ -641,6 +642,7 @@ static int l_cmdcore_restart(lua_State* L) {
 
 	// 开始执行模块的真正代码，model的lua state只能在staff的strand中执行
 	// 避免任何竞争
+	m->staff.setevp(mgr->thread_pool);
 	m->staff.async<void>([m,path](){
 		if(!m->L) {
 			return ;
@@ -1385,27 +1387,31 @@ void LuaModelManager::init(int argc, char** argv)
 		exit(1);
 	}
 
+	// 线程池和staff
+	thread_pool = std::make_shared<grok::EventPools>();
+	staff.setevp(thread_pool);
+
 	// 启动脚本，创建lua模块
+	// 只有这一次的脚本启动时没有staff保护的
+	// 因为该代码只有在main的主线程跑，而且thread_pool都还没有启动
+	// 所有的model都只是创建并不能运行 不会有任何竞争的
 	if(!create_lua_cmd(start_script.c_str())) {
 		DBG("start load error");
-		exit(1);
+		return;
 	}
 
 	// TODO: 确认脚本path
-	const char* path = "";
+	auto msg_path = work_dir + LUA_PROJECT_DIR + LUA_MSG_MAIN;
 	for (int i = 0; i < dbcon; ++i) {
-		auto* L = create_lua_scripts(path);
+		auto* L = create_lua_scripts(msg_path.c_str());
 		lua_scripts.Give(L);
 	}
-
-	msgcenter->start(dbcon);
 }
 
 void LuaModelManager::uninit()
 {
-	// 停止接收消息处理
-	if(msgcenter) {
-		msgcenter->stop();
+	if(thread_pool) {
+		thread_pool->stop();
 	}
 
 	// 把模块删除
@@ -1428,13 +1434,26 @@ void LuaModelManager::uninit()
 
 void LuaModelManager::start()
 {
-	boost::asio::io_service::work w(ios);
-	ios.run();
+	thread_pool->start();// 这一刻，所有的model才开始真正运行起来
+	// check所有的model都初始化完成
+	auto r = lua_models.readGuard();
+	for (;;) {
+		bool ok = true;
+		for (auto& it:r->name2model) {
+			if(!it.second->init) {
+				ok = false;
+				break;
+			}
+		}
+		if(ok) {
+			break;
+		}
+	}
 }
 
 void LuaModelManager::stop()
 {
-	ios.stop();
+	thread_pool->ios().stop();
 }
 
 struct LuaMsgScriptRun : public GrokRunable {
@@ -1444,10 +1463,10 @@ struct LuaMsgScriptRun : public GrokRunable {
 	}
 };
 
-void LuaModelManager::on_msg(Session::Ptr s, MsgPackSPtr p)
+void LuaModelManager::on_msg(MsgPackSPtr p)
 {
 	auto run = new LuaMsgScriptRun();
-	run->cb = [s,p](){
+	run->cb = [p](){
 		auto g = LuaModelManager::get_instance()->lua_scripts.GetByGuard();
 		// TODO: 指定接口进行调用
 		const char* main_func = "main";
@@ -1458,7 +1477,6 @@ void LuaModelManager::on_msg(Session::Ptr s, MsgPackSPtr p)
 		
 		detail::MsgPackWithSession u;
 		u.msg = p;
-		u.session = s;
 		lua_pushlightuserdata(L, &u);
 		
 		const char* tname = typeid(detail::MsgPackWithSession).name();
@@ -1480,7 +1498,7 @@ void LuaModelManager::on_msg(Session::Ptr s, MsgPackSPtr p)
 			return;
 		}
 	};
-	msgcenter->post(run);
+	// msgcenter->post(run);
 }
 
 void LuaModelManager::new_luamodel(const char *name, LuaModel::SPtr m)
