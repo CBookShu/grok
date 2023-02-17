@@ -53,7 +53,7 @@ function lmsg.new(msgpack)
         local pack = init_msgpack(self:get_source(), self:get_dest(), pbname, lmsg.msg_type_t.eMsg_response, self:get_sessionid(), pbdata)
         return lcore.sendmsgpack(pack)
     end
-    -- msgpakc begin
+    -- msgpakc end
 
     -- global begin
     function t:self_node_name()
@@ -74,7 +74,7 @@ function lmsg.new(msgpack)
             self:self_node_name(),dest,pbname,lmsg.msg_type_t.eMsg_request,self:msg_nextid(),pbdata)
         return lcore.sendmsgpack(pack)
     end
-    -- global begin
+    -- global end
     return t
 end
 
