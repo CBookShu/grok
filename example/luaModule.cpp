@@ -356,10 +356,6 @@ namespace detail {
 	};
 }	
 
-static lua_State* create_lua_msgmain(const char* path);
-static lua_State* create_lua_model(const char* path);
-static int create_lua_cmd(const char* path);
-
 static int l_core_curdir(lua_State *L) {
 	auto mgr = LuaModelManager::get_instance();
 	lua_pushstring(L, mgr->work_dir.c_str());
@@ -540,7 +536,7 @@ static int l_cmdcore_start(lua_State* L) {
 	}
 
 	auto full_path = mgr->work_dir + path;
-	auto* model_lua = create_lua_model(full_path.c_str());
+	auto* model_lua = mgr->create_lua_model(full_path.c_str());
 	if(!model_lua) {
 		lua_pushboolean(L, 0);
 		return 1;
@@ -609,7 +605,7 @@ static int l_cmdcore_restart(lua_State* L) {
 	}
 
 	auto full_path = mgr->work_dir + path;
-	auto* model_lua = create_lua_model(path.c_str());
+	auto* model_lua = mgr->create_lua_model(path.c_str());
 	if (!model_lua) {
 		lua_pushboolean(L, 0);
 		return 1;
@@ -1026,76 +1022,7 @@ LUAMOD_API int luaopen_dbcore(lua_State *L)
 	return 1;
 }
 
-static lua_State* create_lua_msgmain(const char* path) {
-	auto*L = luaL_newstate();
-	luaL_openlibs(L);
-	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
-	luaL_requiref(L, "core", luaopen_core, 0);
-	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
-	auto r = luaL_loadfile(L, path);
-	if (r) {
-		DBG("Load Error:%s,%s", path, lua_tostring(L, -1));
-		lua_close(L);
-		return nullptr;
-	}
-
-	if(lua_pcall(L,0,0,0)) {
-		DBG("call file error:%s,%s", path, lua_tostring(L, -1));
-		return 0;
-	}
-	return L;
-}
-
-static lua_State* create_lua_model(const char* path) {
-	auto*L = luaL_newstate();
-	luaL_openlibs(L);
-	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
-	luaL_requiref(L, "core", luaopen_core, 0);
-	luaL_requiref(L, "modelcore", luaopen_modelcore, 0);
-	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
-
-	auto r = luaL_loadfile(L, path);
-	if (r) {
-		DBG("Load Error:%s,%s", path, lua_tostring(L, -1));
-		lua_close(L);
-		return nullptr;
-	}
-	return L;
-}
-
-static int create_lua_cmd(const char* path) {
-	auto* L = luaL_newstate();
-	std::unique_ptr<lua_State, LuaStateDeleter> guard(L);
-	
-	luaL_openlibs(L);
-	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
-	luaL_requiref(L, "core", luaopen_core, 0);
-	luaL_requiref(L, "cmdcore", luaopen_cmdcore, 0);
-	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
-
-	if(luaL_loadfile(L, path)) {
-		DBG("load file error:%s,%s", path, lua_tostring(L, -1));
-		return 0;
-	}
-
-	if(lua_pcall(L,0,0,0)) {
-		DBG("call file error:%s,%s", path, lua_tostring(L, -1));
-		return 0;
-	}
-	return 1;
-}
-
 using namespace grok;
-
-struct LuaWithVersion {
-    lua_State* L = nullptr;
-    int version = 0;
-    ~LuaWithVersion() {
-        if (L) {
-            lua_close(L);
-        }
-    }
-};
 
 LuaTable::Var *LuaTable::get_value(const Key &k)
 {
@@ -1381,7 +1308,7 @@ void LuaModelManager::init(int argc, char** argv)
 	}
 
 	// 线程池和staff
-	thread_pool = std::make_shared<grok::EventPools>();
+	thread_pool = std::make_shared<LuaThreadPool>();
 	staff.setevp(thread_pool);
 
 	// 启动脚本，创建lua模块
@@ -1391,16 +1318,6 @@ void LuaModelManager::init(int argc, char** argv)
 	if(!create_lua_cmd(start_script.c_str())) {
 		DBG("start load error");
 		return;
-	}
-
-	auto msg_path = work_dir + LUA_PROJECT_DIR + LUA_MSG_MAIN_PATH;
-	for (int i = 0; i < dbcon; ++i) {
-		auto* L = create_lua_msgmain(msg_path.c_str());
-		if(!L) {
-			DBG("Error Create Msg Script:%s", msg_path.c_str());
-		} else {
-			lua_scripts.Give(L);
-		}
 	}
 }
 
@@ -1452,19 +1369,25 @@ void LuaModelManager::stop()
 	thread_pool->ios().stop();
 }
 
-struct LuaMsgScriptRun : public GrokRunable {
-	std::function<void()> cb;
-	virtual void run() override {
-		cb();
-	}
-};
-
 void LuaModelManager::on_msg(MsgPackSPtr p)
 {
-	thread_pool->ios().dispatch([p](){
-		auto g = LuaModelManager::get_instance()->lua_scripts.GetByGuard();
+	thread_pool->post_msgop([p,this](LuaEntry* e){
+		
+		if (!e->lv.L || e->lv.version != lua_version) {
+			if(e->lv.L) {
+				lua_close(e->lv.L);
+			}
+			std::string msg_path = work_dir + LUA_PROJECT_DIR + LUA_MSG_MAIN_PATH;
+			e->lv.L = create_lua_msgmain(msg_path.c_str());
+			if(!e->lv.L) {
+				DBG("MsgLua Miss:%s", msg_path.c_str());
+				return;
+			}
+			e->lv.version = lua_version;
+		}
+
+		lua_State* L = e->lv.L;
 		const char* main_func = LUA_MSG_MAIN_ENTER;
-		auto* L = g.Get();
 		lua_settop(L, 0);
 		
 		lua_getglobal(L, main_func);
@@ -1495,6 +1418,68 @@ void LuaModelManager::on_msg(MsgPackSPtr p)
 			return;
 		}
 	});
+}
+
+int LuaModelManager::create_lua_cmd(const char *path)
+{
+    auto* L = luaL_newstate();
+	std::unique_ptr<lua_State, LuaStateDeleter> guard(L);
+	
+	luaL_openlibs(L);
+	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
+	luaL_requiref(L, "core", luaopen_core, 0);
+	luaL_requiref(L, "cmdcore", luaopen_cmdcore, 0);
+	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
+
+	if(luaL_loadfile(L, path)) {
+		DBG("load file error:%s,%s", path, lua_tostring(L, -1));
+		return 0;
+	}
+
+	if(lua_pcall(L,0,0,0)) {
+		DBG("call file error:%s,%s", path, lua_tostring(L, -1));
+		return 0;
+	}
+	return 1;
+}
+
+lua_State *LuaModelManager::create_lua_model(const char *path)
+{
+    auto*L = luaL_newstate();
+	luaL_openlibs(L);
+	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
+	luaL_requiref(L, "core", luaopen_core, 0);
+	luaL_requiref(L, "modelcore", luaopen_modelcore, 0);
+	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
+
+	auto r = luaL_loadfile(L, path);
+	if (r) {
+		DBG("Load Error:%s,%s", path, lua_tostring(L, -1));
+		lua_close(L);
+		return nullptr;
+	}
+	return L;
+}
+
+lua_State *LuaModelManager::create_lua_msgmain(const char *path)
+{
+    auto*L = luaL_newstate();
+	luaL_openlibs(L);
+	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
+	luaL_requiref(L, "core", luaopen_core, 0);
+	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
+	auto r = luaL_loadfile(L, path);
+	if (r) {
+		DBG("Load Error:%s,%s", path, lua_tostring(L, -1));
+		lua_close(L);
+		return nullptr;
+	}
+
+	if(lua_pcall(L,0,0,0)) {
+		DBG("call file error:%s,%s", path, lua_tostring(L, -1));
+		return 0;
+	}
+	return L;
 }
 
 void LuaModelManager::new_luamodel(const char *name, LuaModel::SPtr m)

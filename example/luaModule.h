@@ -2,12 +2,14 @@
 #include <memory>
 #include <map>
 #include <unordered_map>
+#include <atomic>
 
 #include <boost/any.hpp>
 #include <boost/variant.hpp>
 
 #include "grok/grok.h"
 #include "utils.h"
+#include "luaThreadPool.h"
 
 extern "C" {
 #include "lua.h"
@@ -86,13 +88,11 @@ struct LuaModelManager {
 
 
     // 主线程池
-    grok::EventPools::Ptr thread_pool;
+    LuaThreadPool::SPtr thread_pool;
     // models的 strand 主要用于执行usercmd
     grok::WorkStaff staff;
     // lua模块脚本
     grok::grwtype<Data> lua_models;
-    // 消息分发lua脚本
-    grok::LockList<lua_State, LuaStateDeleter> lua_scripts;
     // 多线程竞争的联合锁
     grok::UnionLockLocal<const char*> unionlock;
     // mysql pool
@@ -101,6 +101,8 @@ struct LuaModelManager {
     grok::redis::RedisConPool::SPtr redispool;
     // 工作目录
     std::string work_dir;
+    // msg热更新标识
+    std::atomic_int32_t lua_version{0};
 
 
     static LuaModelManager* get_instance();
@@ -113,6 +115,13 @@ struct LuaModelManager {
     void stop();
 
     void on_msg(grok::MsgPackSPtr p);
+
+    // 创建cmd lua脚本并执行
+    int create_lua_cmd(const char* path);
+    // 创建model 的lua指针
+    lua_State* create_lua_model(const char* path);
+    // 创建msg操作的 lua指针
+    lua_State* create_lua_msgmain(const char* path);
 
     // lua的回调函数用LUA_CALLBACK_FINDER来保存，简单易控
 #define	LUA_CALLBACK_MAIN	    "__LUA_CALLBACK_MAIN__"
