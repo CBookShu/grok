@@ -333,9 +333,8 @@ namespace detail {
 		assert(false);
 	}
 
-	struct MsgPackWithSession {
+	struct MsgPackWrapper {
 		grok::MsgPackSPtr msg;
-
 		boost::string_view get_source() {
 			return msg->source();
 		}
@@ -354,27 +353,10 @@ namespace detail {
 		boost::string_view get_pbdata() {
 			return msg->pbdata();
 		}
-		void write_msg(const char* source,const char*dest,const char*msgname,std::int64_t type,const char *data,size_t len) {
-			auto* mgr = LuaModelManager::get_instance();
-			// mgr->msgcenter->imWriteMsgPack()
-
-			// grok::MsgPackSPtr p = std::make_shared<nodeService::MsgPack>();
-			// p->set_source(source);
-			// p->set_dest(dest);
-			// p->set_msgname(msgname);
-			// p->set_msgtype(nodeService::MsgType(type));
-			// p->set_sessionid(msg->sessionid());
-			// p->mutable_pbdata()->assign(data, len);
-
-			// std::string s;
-			// if (p->SerializeToString(&s)) {
-			// 	mgr->msgcenter->imWriteMsgPack()
-			// }
-		}
 	};
 }	
 
-static lua_State* create_lua_scripts(const char* path);
+static lua_State* create_lua_msgmain(const char* path);
 static lua_State* create_lua_model(const char* path);
 static int create_lua_cmd(const char* path);
 
@@ -469,7 +451,7 @@ static int l_core_unionlock(lua_State* L) {
 
 static int l_msgcore_sendmsgpack(lua_State* L) {
 	auto* mgr = LuaModelManager::get_instance();
-	luaL_argcheck(L, mgr && mgr->imWriteMsgPack, 0, "mgr->msgcenter is null");
+	luaL_argcheck(L, mgr && mgr->imWriteMsgPack, 0, "mgr->imWriteMsgPack is null");
 	// arg1: table {source=xxx,dest=xxx,msgname=xxx,msgtype=xxx,sessionid=xxx,pbdata=xxx}
 	lua_getfield(L, 1, "dest");
 	const char* dest = luaL_checkstring(L, -1);
@@ -509,7 +491,7 @@ static int l_msgcore_sendmsgpack(lua_State* L) {
 
 static int l_msgcore_msgnextid(lua_State* L) {
 	auto* mgr = LuaModelManager::get_instance();
-	luaL_argcheck(L, mgr && mgr->imMsgNextID, 0, "mgr->msgcenter is null");
+	luaL_argcheck(L, mgr && mgr->imMsgNextID, 0, "mgr->imMsgNextID is null");
 	auto id = mgr->imMsgNextID();
 	lua_pushinteger(L, id);
 	return 1;
@@ -517,7 +499,7 @@ static int l_msgcore_msgnextid(lua_State* L) {
 
 static int l_msgcore_nodename(lua_State* L) {
 	auto* mgr = LuaModelManager::get_instance();
-	luaL_argcheck(L, mgr && mgr->imNodeName, 0, "mgr->msgcenter is null");
+	luaL_argcheck(L, mgr && mgr->imNodeName, 0, "mgr->imNodeName is null");
 	auto name = mgr->imNodeName();
 	lua_pushstring(L, name.c_str());
 	return 1;
@@ -1044,12 +1026,23 @@ LUAMOD_API int luaopen_dbcore(lua_State *L)
 	return 1;
 }
 
-static lua_State* create_lua_scripts(const char* path) {
+static lua_State* create_lua_msgmain(const char* path) {
 	auto*L = luaL_newstate();
 	luaL_openlibs(L);
 	luaL_requiref(L, "protobuf.c", luaopen_protobuf_c, 0);
 	luaL_requiref(L, "core", luaopen_core, 0);
 	luaL_requiref(L, "dbcore", luaopen_dbcore, 0);
+	auto r = luaL_loadfile(L, path);
+	if (r) {
+		DBG("Load Error:%s,%s", path, lua_tostring(L, -1));
+		lua_close(L);
+		return nullptr;
+	}
+
+	if(lua_pcall(L,0,0,0)) {
+		DBG("call file error:%s,%s", path, lua_tostring(L, -1));
+		return 0;
+	}
 	return L;
 }
 
@@ -1400,11 +1393,14 @@ void LuaModelManager::init(int argc, char** argv)
 		return;
 	}
 
-	// TODO: 确认脚本path
-	auto msg_path = work_dir + LUA_PROJECT_DIR + LUA_MSG_MAIN;
+	auto msg_path = work_dir + LUA_PROJECT_DIR + LUA_MSG_MAIN_PATH;
 	for (int i = 0; i < dbcon; ++i) {
-		auto* L = create_lua_scripts(msg_path.c_str());
-		lua_scripts.Give(L);
+		auto* L = create_lua_msgmain(msg_path.c_str());
+		if(!L) {
+			DBG("Error Create Msg Script:%s", msg_path.c_str());
+		} else {
+			lua_scripts.Give(L);
+		}
 	}
 }
 
@@ -1465,40 +1461,40 @@ struct LuaMsgScriptRun : public GrokRunable {
 
 void LuaModelManager::on_msg(MsgPackSPtr p)
 {
-	auto run = new LuaMsgScriptRun();
-	run->cb = [p](){
+	thread_pool->ios().dispatch([p](){
 		auto g = LuaModelManager::get_instance()->lua_scripts.GetByGuard();
-		// TODO: 指定接口进行调用
-		const char* main_func = "main";
+		const char* main_func = LUA_MSG_MAIN_ENTER;
 		auto* L = g.Get();
 		lua_settop(L, 0);
-		lua_getglobal(L, main_func);
-		luaL_checktype(L, 1, LUA_TFUNCTION);
 		
-		detail::MsgPackWithSession u;
+		lua_getglobal(L, main_func);
+		if (!lua_isfunction(L, -1)) {
+			DBG("main.lua must has a main function");
+			return;
+		}
+
+		detail::MsgPackWrapper u;
 		u.msg = p;
 		lua_pushlightuserdata(L, &u);
 		
-		const char* tname = typeid(detail::MsgPackWithSession).name();
+		const char* tname = typeid(detail::MsgPackWrapper).name();
 		if(luaL_newmetatable(L, tname)) {
 			lua_pushvalue(L, -1);
 			lua_setfield(L, -2, "__index");
 
-			detail::Helper_Bind_Cpp_Func(L, "get_source", &detail::MsgPackWithSession::get_source);
-			detail::Helper_Bind_Cpp_Func(L, "get_dest", &detail::MsgPackWithSession::get_dest);
-			detail::Helper_Bind_Cpp_Func(L, "get_msgname", &detail::MsgPackWithSession::get_msgname);
-			detail::Helper_Bind_Cpp_Func(L, "get_msgtype", &detail::MsgPackWithSession::get_msgtype);
-			detail::Helper_Bind_Cpp_Func(L, "get_sessionid", &detail::MsgPackWithSession::get_sessionid);
-			detail::Helper_Bind_Cpp_Func(L, "get_pbdata", &detail::MsgPackWithSession::get_pbdata);
-			detail::Helper_Bind_Cpp_Func(L, "write_msg", &detail::MsgPackWithSession::write_msg);
+			detail::Helper_Bind_Cpp_Func(L, "get_source", &detail::MsgPackWrapper::get_source);
+			detail::Helper_Bind_Cpp_Func(L, "get_dest", &detail::MsgPackWrapper::get_dest);
+			detail::Helper_Bind_Cpp_Func(L, "get_msgname", &detail::MsgPackWrapper::get_msgname);
+			detail::Helper_Bind_Cpp_Func(L, "get_msgtype", &detail::MsgPackWrapper::get_msgtype);
+			detail::Helper_Bind_Cpp_Func(L, "get_sessionid", &detail::MsgPackWrapper::get_sessionid);
+			detail::Helper_Bind_Cpp_Func(L, "get_pbdata", &detail::MsgPackWrapper::get_pbdata);
 		}
 		lua_setmetatable(L, -2);
 		if(lua_pcall(L, 1, 0, 0)) {
 			DBG("MSG OP ERROR:%s", lua_tostring(L, -1));
 			return;
 		}
-	};
-	// msgcenter->post(run);
+	});
 }
 
 void LuaModelManager::new_luamodel(const char *name, LuaModel::SPtr m)

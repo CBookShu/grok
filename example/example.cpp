@@ -28,10 +28,10 @@ int main(int argc, char** argv)
 	w.async_wait([luaMgr](boost::system::error_code ec){
 		// luaMgr->stop();
 	});
+	// 先把网络的线程池初始化好[真正监听要等ios.run才开始]
+	nodecenter->get_server()->start(9595, 8);
 	// start过后所有的Model都初始化完成
 	luaMgr->start();
-	// model初始化完成后才开始正式监听网络消息，这样投递的消息处理model一定是已经好了
-	nodecenter->get_server()->start(9595, 8);
 	// 主线程消息循环
 	ios.run();
 	luaMgr->uninit();

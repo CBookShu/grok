@@ -80,18 +80,19 @@ function lcore.unionlock(keys, cb)
     return core.core_unionlock(keys or {}, cb)
 end
 
--- 举例[TODO]
--- lcore.sendmsgpack({source = ""})
+-- 举例 具体使用查看lmsg.lua
+-- table {source=xxx,dest=xxx,msgname=xxx,msgtype=xxx,sessionid=xxx,pbdata=xxx}
+-- lcore.sendmsgpack({source="", dest="",msgname="",msgtype=x,sessionid=y,pbdata=""})
 function lcore.sendmsgpack(msgpack)
     return core.msgcore_sendmsgpack(msgpack)
 end
 
--- 举例[TODO]
+-- 举例 具体使用查看lmsg.lua
 function lcore.msgnextid()
     return core.msgcore_msgnextid()
 end
 
--- 举例[TODO]
+-- 举例 具体使用查看lmsg.lua
 function lcore.nodename()
     return core.msgcore_nodename()
 end

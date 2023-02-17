@@ -176,3 +176,7 @@ lcore.logtrace("msgnextid:%d",msgnextid)
 local nodename = lcore.nodename()
 assert(type(nodename) == "string")
 lcore.logtrace("nodename:%s", nodename)
+
+local lmsg = require "scripts.core.lmsg"
+local msg = lmsg.new()
+msg:send_notify(msg:self_node_name(),"test_model.Test_Model_Msg1", sun_info)
