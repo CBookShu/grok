@@ -7,6 +7,9 @@ lmsg.msg_type_t = {
     eMsg_response = 2,
     eMsg_notify = 3,
 }
+lmsg.msg_norsp = {}
+lmsg.msg_rsp = {}
+
 lmsg.node_center_name = "NodeCenter"
 
 local function init_msgpack(source,dest,msgname,msgtype,sessionid,pbdata)
@@ -73,6 +76,43 @@ function lmsg.new(msgpack)
     end
     -- global begin
     return t
+end
+
+function lmsg.regsiter_msg_norsp(req_msgname,cb)
+    lmsg.msg_norsp[req_msgname] = function (msgpack)
+        local req = protobuf.decode(req_msgname, msgpack:get_pbdata())
+        cb(msgpack,req)
+    end
+end
+
+function lmsg.regsiter_msg_reqrsp(req_msgname,rsp_msgname,cb)
+    lmsg.msg_rsp[req_msgname] = function (msgpack)
+        local req = protobuf.decode(req_msgname, msgpack:get_pbdata())
+        local rsp = cb(msgpack,req)
+        if not rsp then
+            lcore.logwarn("req[%s]rsp[%s] has no rspret", req_msgname, rsp_msgname)
+            return
+        end
+        local pbdata = protobuf.encode(rsp_msgname, rsp)
+        local pack = init_msgpack(msgpack:get_source(), msgpack:get_dest(), rsp_msgname, lmsg.msg_type_t.eMsg_response, msgpack:get_sessionid(), pbdata)
+        return lcore.sendmsgpack(pack)
+    end
+end
+
+function lmsg.notify_msgpack(msgpack)
+    local t = msgpack:get_msgtype()
+    local msgname = msgpack:get_msgname()
+    if t == lmsg.msg_type_t.eMsg_request then
+        local cb = lmsg.msg_rsp[msgname]
+        if cb then
+            cb(msgpack)
+        end
+    else
+        local cb = lmsg.msg_norsp[msgname]
+        if cb then
+            cb(msgpack)
+        end
+    end
 end
 
 return lmsg
