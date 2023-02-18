@@ -104,11 +104,11 @@ local function dbg(t)
     lcore.logtrace(dbg_s)
 end
 
-local rds_rpl_t = ldbcore.rdis_status
+local rds_rpl_t = ldbcore.redis_status
 r,txt = ldbcore.redis_get(function (db)
     local rds = ldbcore.redis_wrapper_query(db)
     local res = rds:query("SELECT ?", 1)
-    assert(res and res[1][1] ~= rds_rpl_t.type_rpl_err and res[1][1] ~= rds_rpl_t.type_rpl_ctxerr)
+    assert(rds:check_oneres(res))
     assert(res[1][1] == rds_rpl_t.type_rpl_status)
     assert(res[1][2] == "OK")
 
@@ -123,21 +123,21 @@ r,txt = ldbcore.redis_get(function (db)
 
     -- cmds 单个结果
     res = rds:query("DEL hash_key")
-    assert(res and res[1][1] == rds_rpl_t.type_rpl_int)
+    assert(rds:check_oneres(res))
     local count = 100
     for i = 1, count do
         rds:appendcmd("HSET hash_key ? ?", fmt("f%d", i), fmt("v%d", i))
     end
     res = rds:query()
-    assert(res)
+    assert(rds:check_oneres(res))
     for i = 1, count do
-        assert(res[i][1] == rds_rpl_t.type_rpl_int and res[1][2] == 1)
+        assert(rds:check_oneres(res))
     end
     for i = 1, count do
         rds:appendcmd("HGET hash_key ?", fmt("f%d",i))
     end
     res = rds:query()
-    assert(res)
+    assert(rds:check_oneres(res))
     for i = 1, count do
         assert(res[i][1] == rds_rpl_t.type_rpl_str and res[i][2] == fmt("v%d",i))
     end
@@ -151,11 +151,12 @@ r,txt = ldbcore.redis_get(function (db)
     local cmd = table.concat(ar, " ")
     lcore.logtrace("cmd:%s", cmd)
     res = rds:query(cmd)
-    assert(res and res[1][1] == rds_rpl_t.type_rpl_array)
+    assert(rds:check_oneres(res))
     assert(#res[1][2] == count)
     for i = 1, count do
         assert(res[1][2][i] == fmt("v%d",i))
     end
+
     return true, "redis_db_api_pass"
 end)
 assert(r, "redis_db_api_not_pass")

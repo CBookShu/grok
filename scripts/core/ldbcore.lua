@@ -9,7 +9,7 @@ local ldbcore = {}
 #define REDIS_REPLY_STATUS 5
 #define REDIS_REPLY_ERROR 6
 ]]
-ldbcore.rdis_status = {
+ldbcore.redis_status = {
     type_rpl_ctxerr = 0,
     type_rpl_str = 1,
     type_rpl_array = 2,
@@ -54,6 +54,8 @@ end
 -- 辅助使用，便于Lua代码提示
 function ldbcore.mysql_wrapper_query(db)
     local t = {}
+    -- 当callback有值，那么query的返回值就是callback的返回值
+    -- 当callback无值, -1是错误，其他值根据sql来确认
     function t:query(sql,callback,...)
         return db:query({
             query = sql,
@@ -86,6 +88,91 @@ function ldbcore.mysql_wrapper_res(r)
     return res
 end
 
+function ldbcore.mysql_make_insert_or_update(tbl,data,duptbl,defaultvalues)
+    defaultvalues = defaultvalues or {}
+    duptbl = duptbl or {}
+
+    local fileds = {}
+    local values = {}
+    local dupkv = {}
+
+    for i, d in ipairs(data) do
+        for f,v in pairs(d) do
+            table.insert(fileds,f)
+            if v == "?" then
+                table.insert(values,string.format("?"))
+            elseif type(v) == "boolean" then
+                table.insert(values,v and "1" or "0")
+            elseif type(v) == "string" then
+                table.insert(values,string.format("\'%s\'", v))
+            else
+                table.insert(values,tostring(v)) 
+            end
+            defaultvalues[i] = defaultvalues[i] or {}
+            defaultvalues[i][f] = nil
+        end
+    end
+
+    for i, d in ipairs(defaultvalues) do
+        for f,v in pairs(d) do
+            table.insert(fileds,f)
+            if v == "?" then
+                table.insert(values,string.format("?"))
+            elseif type(v) == "boolean" then
+                table.insert(values,v and "1" or "0")
+            elseif type(v) == "string" then
+                table.insert(values,string.format("\'%s\'", v))
+            else
+                table.insert(values,tostring(v)) 
+            end
+        end 
+    end
+    for i, d in ipairs(duptbl) do
+        for f,v in pairs(d) do
+            if v == "?" then
+                table.insert(dupkv, string.format("%s=?",f))
+            elseif type(v) == "string" then
+                table.insert(dupkv, string.format("%s=\'%s\'",f,v))
+            else
+                table.insert(dupkv, string.format("%s=%s",f,tostring(v)))
+            end
+        end 
+    end
+    local fieldtxt = table.concat(fileds, ",")
+    local valuetxt = table.concat(values, ",")
+    local duptxt = table.concat(dupkv, ",")
+
+    if string.len(duptxt) > 0 then
+        return string.format("INSERT INTO %s (%s) VALUES(%s) ON DUPLICATE KEY UPDATE %s", tbl, fieldtxt, valuetxt, duptxt)
+    else
+        return string.format("INSERT INTO %s (%s) VALUES(%s)", tbl, fieldtxt, valuetxt)
+    end
+end
+
+function ldbcore.mysql_make_select(tbl,keys,wherecons)
+    local field = "*"
+    if next(keys) then
+        field = table.concat(keys, ",")
+    end
+    local where = ""
+    if next(wherecons) then
+        local t = {}
+        for k,v in pairs(wherecons) do
+            if type(v) == "string" then
+                table.insert(t, string.format("%s=\'%s\'",k, v))
+            else
+                table.insert(t, string.format("%s=%s",k, tostring(v)))
+            end
+        end
+        where = table.concat(t, " AND ")
+    end
+
+    if string.len(where) > 0 then
+        return string.format("SELECT %s FROM %s WHERE %s", field,tbl,where) 
+    else
+        return string.format("SELECT %s FROM %s", field,tbl) 
+    end
+end
 
 -- redis 接口
 --[[
@@ -96,7 +183,7 @@ end
         table.insert(cmds, ldbcore.redis_make_cmd("GET ?", "test_key"))
         local res = rds:query(cmds)
         assert(res)
-        assert(res[1][1] == ldbcore.rdis_status.type_rpl_str and res[2][2] == "test_value")
+        assert(res[1][1] == ldbcore.redis_status.type_rpl_str and res[2][2] == "test_value")
     end)
 
 ]]
@@ -137,11 +224,22 @@ function ldbcore.redis_wrapper_query(db)
         if fmt then 
             local cmd = ldbcore.redis_make_cmd(fmt, ...)
             table.insert(cmds, cmd)
-    end
+        end
         local len = #cmds
         local res = db:query(cmds)
         cmds = {}
         return res
+    end
+    function t:check_oneres(res)
+        if not res then
+            return false
+        end
+        local redis_status = ldbcore.redis_status
+        if res[1] == redis_status.type_rpl_ctxerr 
+        or res[1] == redis_status.type_rpl_ctxerr then
+            return false
+        end
+        return true
     end
     return t
 end
