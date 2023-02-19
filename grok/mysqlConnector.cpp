@@ -294,7 +294,7 @@ void grok::mysql::SqlTextMaker::BindParam(MYSQL *con, int pos, const char *s, si
 {
     auto len = n * 2 + 1;
     params[pos].resize(len);
-    auto newlen = mysql_real_escape_string(con, (char*)params[pos].data(), s, len);
+    auto newlen = mysql_real_escape_string(con, (char*)params[pos].data(), s, n);
     params[pos].resize(newlen);
     
     params[pos].append("'");
