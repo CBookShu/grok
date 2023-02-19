@@ -1,5 +1,5 @@
 # 项目概述
-    lua绑定的节点服务器项目。
+    lua绑定的节点服务器项目
     
 # 编译说明
 ### 目前的平台: Wsl2 Ubuntu18.0.4
@@ -23,7 +23,7 @@
     make  
     sudo make install   -->
 
-### grok代码编译运行
+### grok代码编译运行【项目依赖redis和mysql服务器，具体配置可以在example.cpp的init中查看]
     git clone git@github.com:CBookShu/grok.git  
     cd grok  
     xmake

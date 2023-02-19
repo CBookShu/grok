@@ -6,11 +6,13 @@
         2） 消息接口[finish]
         3)  优化启动流程，在lua中通过配置接口启动
     4.  人为启动cmd命令脚本[热更新依赖]
-    5.  联锁local and redis[pending redis remote lock]
+    5.  local lock[finish]
     6.  全局的本地配置和监听[启动流程和cmd命令依赖]
 ## redis缓存mysql功能
-    doing
-    to do test
+    finish lrdscache.lua
+## 分布式锁[todo]
+    可以参考:
+    https://github.com/sewenew/redis-plus-plus
 
 ## 跨平台的编译
     1. 将依赖库[除boost]挪到deps中，方便一次性编译
