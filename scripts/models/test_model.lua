@@ -31,8 +31,7 @@ local test_cache = {
 }
 lcore.set_cache(self_model_name, test_cache)
 local cache = lcore.get_cache(self_model_name)
-local s = debug_table(cache)
-lcore.logtrace(s)
+assert(cache)
 
 -- protobuf接口
 local protobuf = require "scripts.utils.protobuf"
@@ -48,23 +47,20 @@ local sun_info = {
     addr = "HuaGuoShan"
 }
 local pbdata = protobuf.encode("test_model.Test_Model_Msg1", sun_info)
-local pbdata_str = convert_pbdata_to_str(pbdata)
-lcore.logtrace("Sun_info pbdata_str:%s", pbdata_str)
+assert(pbdata)
 
 local sun_info_1 = protobuf.decode("test_model.Test_Model_Msg1", pbdata)
-local sun_info_1_des = debug_table(sun_info_1)
-lcore.logtrace("sun_info_1_des:%s", sun_info_1_des)
+assert(sun_info_1)
 
 -- cache key val接口
 lcore.set_cache(self_model_name, "sun_info", sun_info)
 local sun_info_cache = lcore.get_cache(self_model_name, "sun_info")
-local sun_info_cache_des = debug_table(sun_info_cache or {})
-lcore.logtrace("sun_info_cache_des:%s", sun_info_cache_des)
+assert(sun_info_cache)
 
 
 -- dbcore 测试用例
 local ldbcore = require "scripts.core.ldbcore"
-local r,txt = ldbcore.mysql_get(function (db)
+local r = ldbcore.mysql_get(function (db)
     local t = ldbcore.mysql_wrapper_query(db)
     -- t:query("SELECT NOW() AS T", function (r)
     --     local res = ldbcore.mysql_wrapper_res(r)
@@ -82,22 +78,22 @@ local r,txt = ldbcore.mysql_get(function (db)
     assert(t:query("INSERT INTO testtable (n1,s2) VALUES(1, 'hello1')") == 1)
     assert(t:query("INSERT INTO testtable (n1,s2) VALUES(?, ?)", nil, 2, "hello2") == 1)
 
+    assert(t:query("INSERT INTO testtable (n1,s2) VALUES(?, ?)", nil, 3, pbdata) == 1)
+
     t:query("SELECT * FROM testtable", function (r)
         local res = ldbcore.mysql_wrapper_res(r)
         for i = 1, 2 do
             assert(res:next())
             local n1 = res:get_num("n1")
             local s2 = res:get_string("s2")
-            print(string.format("n1 = %d, s2 = %s", n1, s2))
             assert(n1 == i)
             assert(s2 == string.format("hello%d", i))
         end
     end)
 
-    return true, "mysql_db_api_pass"
+    return true
 end)
-assert(r, "mysql_db_api_not_pass")
-lcore.logtrace(txt)
+assert(r)
 
 local function dbg(t)
     local dbg_s = debug_table(t)
@@ -105,10 +101,10 @@ local function dbg(t)
 end
 
 local rds_rpl_t = ldbcore.redis_status
-r,txt = ldbcore.redis_get(function (db)
+r = ldbcore.redis_get(function (db)
     local rds = ldbcore.redis_wrapper_query(db)
     local res = rds:query("SELECT ?", 1)
-    assert(rds:check_oneres(res))
+    assert(rds:check_res(res))
     assert(res[1][1] == rds_rpl_t.type_rpl_status)
     assert(res[1][2] == "OK")
 
@@ -123,21 +119,21 @@ r,txt = ldbcore.redis_get(function (db)
 
     -- cmds 单个结果
     res = rds:query("DEL hash_key")
-    assert(rds:check_oneres(res))
+    assert(rds:check_res(res))
     local count = 100
     for i = 1, count do
         rds:appendcmd("HSET hash_key ? ?", fmt("f%d", i), fmt("v%d", i))
     end
     res = rds:query()
-    assert(rds:check_oneres(res))
+    assert(rds:check_res(res))
     for i = 1, count do
-        assert(rds:check_oneres(res))
+        assert(rds:check_res(res))
     end
     for i = 1, count do
         rds:appendcmd("HGET hash_key ?", fmt("f%d",i))
     end
     res = rds:query()
-    assert(rds:check_oneres(res))
+    assert(rds:check_res(res))
     for i = 1, count do
         assert(res[i][1] == rds_rpl_t.type_rpl_str and res[i][2] == fmt("v%d",i))
     end
@@ -149,26 +145,22 @@ r,txt = ldbcore.redis_get(function (db)
         table.insert(ar, fmt("f%d",i))
     end
     local cmd = table.concat(ar, " ")
-    lcore.logtrace("cmd:%s", cmd)
     res = rds:query(cmd)
-    assert(rds:check_oneres(res))
+    assert(rds:check_res(res))
     assert(#res[1][2] == count)
     for i = 1, count do
         assert(res[1][2][i] == fmt("v%d",i))
     end
-
-    return true, "redis_db_api_pass"
+    return true
 end)
-assert(r, "redis_db_api_not_pass")
-lcore.logtrace(txt)
+assert(r)
 
 -- union lock 测试用例
-r,txt = lcore.unionlock({"hello", "world"}, function ()
-    print("locak hello and world")
+r = lcore.unionlock({"hello", "world"}, function ()
+    print("lock hello and world")
     return true, "unionlock api pass"
 end)
-assert(r, "unionlock api not pass")
-lcore.logtrace(txt)
+assert(r)
 
 -- msgcore 测试
 local msgnextid = lcore.msgnextid()
@@ -180,4 +172,53 @@ lcore.logtrace("nodename:%s", nodename)
 
 local lmsg = require "scripts.core.lmsg"
 local msg = lmsg.new()
+-- 监听了 "test_model.Test_Model_Msg1" 的msg可以收到该数据消息
 msg:send_notify(msg:self_node_name(),"test_model.Test_Model_Msg1", sun_info)
+-- TODO request and response
+
+-- redis cache
+local lrdscache = require "scripts.core.lrdscache"
+local task_name = "test"
+lcore.logtrace("redis cache before")
+local test_get_table = {1000, 1001}
+for i,v in ipairs(test_get_table) do
+    local userid = v
+
+    local lockkey = task_name..tostring(userid)
+    lcore.unionlock({lockkey}, function ()
+        -- 获取玩家数据
+        local zhu_info = {
+            -- string name = 1;
+            -- int32 age = 2;
+            -- string addr = 3;
+            name = "ZhuBaJie",
+            age = userid,
+            addr = "GaoLaoZhuang"
+        }
+    
+        -- 没有数据，就初始化一份给过去
+        local err,data = lrdscache.set_cache("test", userid, zhu_info)
+        assert(err)
+    
+        err,data = lrdscache.get_cache("test", userid)
+        assert(err)
+        assert(data)
+        -- lcore.logtrace("set after")
+        -- dbg(data)
+    end)
+    
+end
+
+for i,v in ipairs(test_get_table) do
+    local userid = v
+
+    local lockkey = task_name..tostring(userid)
+    lcore.unionlock({lockkey}, function ()
+        local ok,data= lrdscache.get_cache("test", userid)
+        assert(ok)
+        lcore.logtrace("userid:%d", userid)
+        lcore.logtrace("data:%s", debug_table(data))
+    end)
+    
+end
+lcore.logtrace("redis cache after")

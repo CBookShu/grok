@@ -202,14 +202,12 @@ function ldbcore.redis_make_cmd(fmt,...)
     for w in string.gmatch(fmt, "%S+") do
         if w == "?" then
             argc = argc + 1
+            table.insert(vec_argv, argv[argc])
         else
             table.insert(vec_argv, w)
         end
     end
     assert(argc == #argv)
-    for i,v in ipairs(argv) do
-        table.insert(vec_argv, tostring(v))
-    end
     return vec_argv
 end
 
@@ -225,19 +223,24 @@ function ldbcore.redis_wrapper_query(db)
             local cmd = ldbcore.redis_make_cmd(fmt, ...)
             table.insert(cmds, cmd)
         end
-        local len = #cmds
+        if #cmds == 0 then
+            return {},{}
+        end
         local res = db:query(cmds)
+        local ret_cmds = cmds
         cmds = {}
-        return res
+        return res,ret_cmds
     end
-    function t:check_oneres(res)
+    function t:check_res(res)
         if not res then
             return false
         end
         local redis_status = ldbcore.redis_status
-        if res[1] == redis_status.type_rpl_ctxerr 
-        or res[1] == redis_status.type_rpl_ctxerr then
-            return false
+        for i,v in ipairs(res) do
+            if v[1] == redis_status.type_rpl_ctxerr 
+            or v[1] == redis_status.type_rpl_err then
+                return false
+            end        
         end
         return true
     end

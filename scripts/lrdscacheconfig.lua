@@ -1,7 +1,7 @@
 local Config = {
 
     -- 是否定时进行同步操作
-    syncenable = false,
+    syncenable = true,
 
     -- 启动时是否立刻进行一次同步
     checkonstart = true,

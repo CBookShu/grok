@@ -1,3 +1,4 @@
+require "scripts.utils.functions"
 local core = require ("core")
 local lcore = {}
 
@@ -46,6 +47,13 @@ function lcore.logerror(...)
     local s = string.format(...)
     s = string.format( "%s\r\n %s", s, trace )
     core.core_log(4, s)
+end
+
+function lcore.logtable(tbl)
+    local di = debug.getinfo(2)
+    local s = debug_table(tbl)
+    s = string.format("[%s][%d]%s",trim_src(di.short_src),di.currentline,s)
+    core.core_log(1, s)
 end
 
 -- 举例:

@@ -43,6 +43,10 @@ local lastchecktime = nil
     3.  同步redis数据到mysql一定要保证有且仅有一个在运行
 ]]
 
+function lrdscahce.check_sync_enable()
+    return Config.syncenable
+end
+
 function lrdscahce.create_mysql(name)
     local r = ldbcore.mysql_get(function (db)
         local mysql = ldbcore.mysql_wrapper_query(db)
@@ -57,7 +61,7 @@ function lrdscahce.create_mysql(name)
 end
 
 function lrdscahce.get_rds_name(name, key)
-    return string.format("%s_rds_%s:%s", tag, name, key)
+    return string.format("%s_rds_%s:%d", tag, name, key)
 end
 
 function lrdscahce.get_mysql_name(name)
@@ -98,7 +102,7 @@ function lrdscahce.rename_dirytable()
     return ldbcore.redis_get(function (db)
         local rds = ldbcore.redis_wrapper_query(db)
         local res = rds:query("SELECT ?", redisdbindex)
-        if not rds:check_oneres(res) then
+        if not rds:check_res(res) then
             return false
         end
 
@@ -108,15 +112,22 @@ function lrdscahce.rename_dirytable()
             rds:appendcmd("RENAMENX ? ?", dirtyname, dirtysyncname)
         end
 
+        local redis_status = ldbcore.redis_status
         res = rds:query()
-        if not res then
-            return false
-        end
         for i,v in ipairs(res) do
-            if not rds:check_oneres(v) then
+            if v[1] == redis_status.type_rpl_ctxerr then
+                -- 网络错误，就不能继续下去了
                 return false
             end
+
+            if v[1] ~= redis_status.type_rpl_int then
+                if v[2] ~= "ERR no such key" then
+                    lcore.logerror("renamenx error: %s,%s", Config.mysqlregister[i], v[2])
+                    return false
+                end
+            end
         end
+
         return true
     end)
 end
@@ -131,26 +142,26 @@ function lrdscahce.sync_rds_to_mysql(name)
     local count = 0
     repeat
         local list = {}
-        local r = ldbcore.mysql_get(function (db)
+        local r = ldbcore.redis_get(function (db)
             local rds = ldbcore.redis_wrapper_query(db)
             local res = rds:query("SELECT ?", redisdbindex)
-            if not rds:check_oneres(res) then
+            if not rds:check_res(res) then
                 return false
             end
 
             res = rds:query("SSCAN ? ? COUNT ?", rds_dirtysync_table, cur, percount)
-            if not rds:check_oneres(res) then
+            if not rds:check_res(res) then
                 return false
             end
             
-            if res[1] ~= ldbcore.redis_status.type_rpl_array then
+            if res[1][1] ~= ldbcore.redis_status.type_rpl_array then
                 -- 结束了
                 list = {}
                 cur = 0
                 return true
             end
-            cur = tonumber(res[2][1]) or 0
-            list = res[2][2] or {}
+            cur = tonumber(res[1][2][1]) or 0
+            list = res[1][2][2] or {}
             return true
         end)
         if not r then
@@ -162,7 +173,7 @@ function lrdscahce.sync_rds_to_mysql(name)
         r = ldbcore.redis_get(function (db)
             local rds = ldbcore.redis_wrapper_query(db)
             res = rds:query("SELECT ?", redisdbindex)
-            if not rds:check_oneres(res) then
+            if not rds:check_res(res) then
                 return false
             end
 
@@ -174,14 +185,8 @@ function lrdscahce.sync_rds_to_mysql(name)
             end
 
             res = rds:query()
-            if not rds:check_oneres(res) then
+            if not rds:check_res(res) then
                 return false
-            end
-
-            for i, v in ipairs(res) do
-                if not rds:check_oneres(v) then
-                    return false
-                end
             end
             return true
         end)
@@ -197,8 +202,8 @@ function lrdscahce.sync_rds_to_mysql(name)
             -- TODO: 事务
             for i,v in ipairs(list) do
                 local key = list[i]
-                local data = res[i][2]
-                if -1 == mysql:query(sqltext, key, data, data) then
+                local data = res[i * 2][2]
+                if -1 == mysql:query(sqltext, nil, key, data, data) then
                     -- 这里非常危险！
                     -- 一般来说其他地方的报错，数据都是没有任何影响的，最多redis会无法同步和清理
                     -- 但是这里一旦出错，不及时进行回复，那么会面临数据丢失！
@@ -209,7 +214,7 @@ function lrdscahce.sync_rds_to_mysql(name)
                         1. expiredtime如果足够大，后面会有机制再重试的。
                         2. 最好增加报警，预防expiredtime 超时都无法自动同步【即，真的是mysql异常了】的情况
                     ]]
-                    lcore.logerror("sqlname:%s mainkey:%s sync error!!!!!")
+                    lcore.logerror("sqlname:%s mainkey:%d sync error!!!!!", mysql_name, key)
                     return false
                 end
             end
@@ -224,19 +229,21 @@ function lrdscahce.sync_rds_to_mysql(name)
     return ldbcore.redis_get(function (db)
         local rds = ldbcore.redis_wrapper_query(db)
         local res = rds:query("SELECT ?", redisdbindex)
-        if not rds:check_oneres(res) then
+        if not rds:check_res(res) then
             return false
         end
         res = rds:query("DEL ?", rds_dirtysync_table)
-        return rds:check_oneres(res)
+        return rds:check_res(res)
     end)
 end
 
 function lrdscahce.sync_all_rds_to_mysql()
     for i,name in ipairs(Config.mysqlregister) do
+        lcore.logtrace("begin sync %s", name)
         if not lrdscahce.sync_rds_to_mysql(name) then
             return false
         end
+        lcore.logtrace("end sync %s", name)
     end
     return true
 end
@@ -269,21 +276,21 @@ function lrdscahce.get_cache(name,key)
     local r, data = ldbcore.redis_get(function (db)
         local rds = ldbcore.redis_wrapper_query(db)
         local res = rds:query("SELECT ?", redisdbindex)
-        if not rds:check_oneres(res) then
+        if not rds:check_res(res) then
             return false, nil
         end
 
         res = rds:query("GET ?", rdsname)
-        if not rds:check_oneres(res) then
+        if not rds:check_res(res) then
             return false, nil 
         end
 
         -- 只有字符串是我们想要的
-        if res[1] ~= ldbcore.redis_status.type_rpl_str then
+        if res[1][1] ~= ldbcore.redis_status.type_rpl_str then
             return true,nil
         end
 
-        return true,res[2]
+        return true,res[1][2]
     end)
 
     if not r then
@@ -335,7 +342,7 @@ function lrdscahce.get_cache(name,key)
     r = ldbcore.redis_get(function (db)
         local rds = ldbcore.redis_wrapper_query(db)
         local res = rds:query("SELECT ?", redisdbindex)
-        if not rds:check_oneres(res) then
+        if not rds:check_res(res) then
             return false
         end
 
@@ -343,16 +350,12 @@ function lrdscahce.get_cache(name,key)
         rds:appendcmd("SET ? ?", rdsname, data)
         rds:appendcmd("EXPIRE ? ?", rdsname, expiretime)
         res = rds:query()
-        if not res then
-            return false
-        end
+
         -- 这里一共两个操作,有下面2种情况
         -- 1 set操作成功 expire操作失败，并且该数据后面再无操作，则会导致redis永久保存一个临时数据
         -- 2 expire成功,set失败？ 这只有错误的并行才会导致。忽略
-        for i,v in ipairs(res) do
-            if not rds:check_oneres(v) then
-                return false
-            end
+        if not rds:check_res(res) then
+            return false
         end
         return true
     end)
@@ -375,7 +378,7 @@ function lrdscahce.set_cache(name,key,data)
     return ldbcore.redis_get(function (db)
         local rds = ldbcore.redis_wrapper_query(db)
         local res = rds:query("SELECT ?", redisdbindex)
-        if not rds:check_oneres(res) then
+        if not rds:check_res(res) then
             return false
         end
 
@@ -388,17 +391,12 @@ function lrdscahce.set_cache(name,key,data)
         rds:appendcmd("SET ? ?", rdsname, data)
         rds:appendcmd("SADD ? ?", rdsdirty, key)
         res = rds:query()
-        if not res then
-            return false
-        end
 
         -- 这里一共两个操作，有下面两种情况
         -- 1 set操作成功 sadd操作失败，并且该数据后面再无操作，则会导致redis永久保存一个临时数据
         -- 2 sadd成功,set失败，只有代码错误才会发生
-        for i,v in ipairs(res) do
-            if not rds:check_oneres(v) then
-                return false
-            end
+        if not rds:check_res(res) then
+            return false
         end
         return true
     end)
