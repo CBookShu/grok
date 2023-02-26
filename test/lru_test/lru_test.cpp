@@ -5,7 +5,8 @@ using namespace std;
 using namespace grok;
 
 struct TestV {
-    int m_v;
+    int m_v = 0;
+    TestV() = default;
     TestV(int v):m_v(v){}
 };
 
@@ -20,7 +21,7 @@ int main(int argc, char**argv) {
     int k = 10;
     gLru<std::string, TestV> lru1(5);
     for (int i = 0; i < 100; ++i) {
-        lru1.set(std::to_string(i * 10), i * 11);
+        lru1.set(std::to_string(i * 10), TestV(i * 11));
     }
     for(int i = 0; i < 100; ++i) {
         auto* v = lru1.get(std::to_string(i * 10));
