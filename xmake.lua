@@ -95,6 +95,11 @@ target("nodeservice_test")
     add_files("test/nodeservice_test/*.cc")
 
 
+target("lru_test")
+    set_kind("binary")
+    add_deps("grok")
+    add_files("test/lru_test/*.cpp")
+
 target("luabind_test")
     set_kind("binary")
     add_deps("lua")
